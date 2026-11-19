@@ -18,6 +18,104 @@ const money = (fen: number) => `¥${(fen / 100).toFixed(2)}`
 const toYuan = (fen: unknown) => (typeof fen === 'number' ? fen / 100 : 0)
 const toFen = (yuan: number) => Math.round(yuan * 100)
 
+// ---------- 列表摘要工具 ----------
+const fen2 = (v: unknown) => (typeof v === 'number' ? `¥${(v / 100).toFixed(2)}` : '—')
+const numS = (v: unknown, d: number) => (typeof v === 'number' ? String(v) : String(d))
+type KV = { label: string; value: string }
+
+const DOG_PRICE_LABELS: Record<string, string> = {
+  base: '起步价', familiar: '熟悉费', over_3km: '超3km加价', extra_pet: '每多一只',
+  feed_only: '仅喂食', step_price: '时长每档加价', holiday_extra: '节日加价',
+}
+const DOG_COUNT_LABELS: Record<string, string> = {
+  base_minutes: '含时长（分钟）', step_minutes: '每档时长（分钟）', max_minutes: '最长时长（分钟）',
+  familiar_free_orders: '免熟悉费订单数', distance_threshold_km: '距离阈值（km）',
+}
+
+function itemsOf(sku: ServiceSku) {
+  const r = (sku.rules ?? {}) as Record<string, unknown>
+  return Array.isArray(r.service_items) ? (r.service_items as { code: string; name: string; price: number }[]) : []
+}
+function hospitalsOf(sku: ServiceSku) {
+  const r = (sku.rules ?? {}) as Record<string, unknown>
+  return Array.isArray(r.hospitals) ? (r.hospitals as { code: string; name: string }[]) : []
+}
+function datesOf(sku: ServiceSku) {
+  const r = (sku.rules ?? {}) as Record<string, unknown>
+  return Array.isArray(r.holiday_dates) ? (r.holiday_dates as string[]) : []
+}
+function clip(names: string[], n = 3) {
+  return names.length > n ? `${names.slice(0, n).join('、')} 等` : names.join('、')
+}
+
+function summaryLines(sku: ServiceSku): string[] {
+  const r = (sku.rules ?? {}) as Record<string, unknown>
+  if (sku.service_type === 'accompany') {
+    const bi = (r.base_item ?? {}) as { name?: string; price?: number }
+    const items = itemsOf(sku)
+    const hs = hospitalsOf(sku)
+    const lines: string[] = []
+    lines.push(
+      r.manual_quote === true
+        ? '手动报价模式：下单后由运营报价确认'
+        : `按服务项自动计价 · 基础服务费 ${bi.name || '基础服务费'} ${fen2(bi.price)}`,
+    )
+    if (items.length) lines.push(`服务项 ${items.length} 项：${clip(items.map((i) => `${i.name} ${fen2(i.price)}`))}`)
+    if (hs.length) lines.push(`支持医院 ${hs.length} 家：${clip(hs.map((h) => h.name))}`)
+    return lines
+  }
+  if (sku.service_type === 'dogwalk') {
+    const lines = [
+      `起步 ${fen2(r.base)}（含 ${numS(r.base_minutes, 20)} 分钟，超时每 ${numS(r.step_minutes, 10)} 分钟加 ${fen2(r.step_price)}）`,
+      `最长 ${numS(r.max_minutes, 120)} 分钟 · 距离阈值 ${numS(r.distance_threshold_km, 3)}km，超出加 ${fen2(r.over_3km)}`,
+      `熟悉费 ${fen2(r.familiar)}（前 ${numS(r.familiar_free_orders, 5)} 单免收）· 每多一只 ${fen2(r.extra_pet)} · 仅喂食 ${fen2(r.feed_only)}`,
+      `节日加价 ${fen2(r.holiday_extra)}${datesOf(sku).length ? `（已设 ${datesOf(sku).length} 个日期）` : ''}`,
+    ]
+    return lines
+  }
+  // 垃圾
+  if (sku.plan === 'monthly') {
+    return [`每日上限 ${numS(r.daily_limit, 1)} 次 · ${r.carry_over === true ? '次数可结转' : '次数不可结转'}`]
+  }
+  return [
+    `按袋计价 · 基础价含 ${numS(r.bags_included, 1)} 袋，超袋 ${fen2(r.extra_bag)}/袋`,
+    `包月参考 ${fen2(r.monthly_price)}/月（每日 ${numS(r.monthly_daily_limit, 1)} 次）`,
+  ]
+}
+
+function detailRows(sku: ServiceSku): KV[] {
+  const r = (sku.rules ?? {}) as Record<string, unknown>
+  if (sku.service_type === 'accompany') {
+    const bi = (r.base_item ?? {}) as { name?: string; price?: number }
+    return [
+      { label: '手动报价', value: r.manual_quote === true ? '开启' : '关闭（按服务项自动计价）' },
+      { label: '基础服务费', value: `${bi.name || '—'}　${fen2(bi.price)}` },
+      { label: '服务项数', value: `${itemsOf(sku).length} 项` },
+      { label: '支持医院', value: `${hospitalsOf(sku).length} 家` },
+    ]
+  }
+  if (sku.service_type === 'dogwalk') {
+    const out: KV[] = []
+    for (const k of Object.keys(DOG_PRICE_LABELS)) out.push({ label: DOG_PRICE_LABELS[k]! + '（元）', value: fen2(r[k]) })
+    for (const k of Object.keys(DOG_COUNT_LABELS)) out.push({ label: DOG_COUNT_LABELS[k]!, value: numS(r[k], 0) })
+    return out
+  }
+  // 垃圾
+  if (sku.plan === 'monthly') {
+    return [
+      { label: '每日次数上限', value: numS(r.daily_limit, 1) },
+      { label: '次数可结转', value: r.carry_over === true ? '是' : '否' },
+    ]
+  }
+  return [
+    { label: '计价单位', value: r.unit === 'bag' ? '按袋' : String(r.unit ?? '—') },
+    { label: '含袋数', value: numS(r.bags_included, 1) },
+    { label: '超袋加价', value: fen2(r.extra_bag) + ' / 袋' },
+    { label: '包月价', value: fen2(r.monthly_price) + ' / 月' },
+    { label: '包月每日上限', value: numS(r.monthly_daily_limit, 1) },
+  ]
+}
+
 // ---------- 结构化表单状态 ----------
 interface NamedRow { code: string; name: string; priceYuan: number }
 const form = reactive({
@@ -198,19 +296,54 @@ async function save() {
     </div>
 
     <el-table :data="rows" v-loading="loading" border stripe style="width: 100%">
-      <el-table-column prop="id" label="ID" width="70" />
-      <el-table-column label="服务" width="130">
-        <template #default="{ row }">{{ typeLabel(row.service_type) }}</template>
-      </el-table-column>
-      <el-table-column label="方案" width="90">
-        <template #default="{ row }"><el-tag size="small">{{ planLabel(row.plan) }}</el-tag></template>
-      </el-table-column>
-      <el-table-column label="基础价" width="120" align="right">
-        <template #default="{ row }">{{ money(row.base_price) }}</template>
-      </el-table-column>
-      <el-table-column label="计价规则（rules）" min-width="420">
+      <el-table-column type="expand">
         <template #default="{ row }">
-          <code class="rules-preview">{{ JSON.stringify(row.rules || {}) }}</code>
+          <div class="expand-box">
+            <div class="expand-sec">
+              <div class="expand-title">规则详情</div>
+              <div class="kv-grid">
+                <div v-for="d in detailRows(row)" :key="d.label" class="kv">
+                  <span class="kv-label">{{ d.label }}</span>
+                  <span class="kv-value">{{ d.value }}</span>
+                </div>
+              </div>
+            </div>
+            <div v-if="row.service_type === 'accompany' && itemsOf(row).length" class="expand-sec">
+              <div class="expand-title">服务项（{{ itemsOf(row).length }}）</div>
+              <el-tag v-for="it in itemsOf(row)" :key="it.code" size="small" class="mtag">
+                {{ it.name }} {{ money(it.price) }}
+              </el-tag>
+            </div>
+            <div v-if="row.service_type === 'accompany' && hospitalsOf(row).length" class="expand-sec">
+              <div class="expand-title">支持医院（{{ hospitalsOf(row).length }}）</div>
+              <el-tag v-for="h in hospitalsOf(row)" :key="h.code" size="small" type="info" class="mtag">{{ h.name }}</el-tag>
+            </div>
+            <div v-if="row.service_type === 'dogwalk' && datesOf(row).length" class="expand-sec">
+              <div class="expand-title">节日加价日（{{ datesOf(row).length }}）</div>
+              <el-tag v-for="d in datesOf(row)" :key="d" size="small" type="warning" class="mtag">{{ d }}</el-tag>
+            </div>
+            <div class="expand-sec">
+              <div class="expand-title">原始 JSON</div>
+              <code class="rules-json">{{ JSON.stringify(row.rules || {}, null, 2) }}</code>
+            </div>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="服务" min-width="180">
+        <template #default="{ row }">
+          <div class="svc">
+            <span class="svc-name">{{ typeLabel(row.service_type) }}</span>
+            <el-tag size="small" :type="row.plan === 'monthly' ? 'warning' : 'info'">{{ planLabel(row.plan) }}</el-tag>
+            <el-tag size="small" :type="row.status === 1 ? 'success' : 'danger'">{{ row.status === 1 ? '上架' : '下架' }}</el-tag>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column label="基础价" width="110" align="right">
+        <template #default="{ row }"><span class="price">{{ money(row.base_price) }}</span></template>
+      </el-table-column>
+      <el-table-column label="计价规则摘要" min-width="400">
+        <template #default="{ row }">
+          <div v-for="(l, i) in summaryLines(row)" :key="i" class="sum-line">{{ l }}</div>
         </template>
       </el-table-column>
       <el-table-column label="操作" width="90" fixed="right">
@@ -351,30 +484,24 @@ async function save() {
   </div>
 </template>
 
-<script lang="ts">
-// 标签常量（模板中使用）
-export default {
-  data() {
-    return {
-      DOG_PRICE_LABELS: {
-        base: '起步价（元）', familiar: '熟悉费（元）', over_3km: '超3km加价（元）',
-        extra_pet: '每多一只（元）', feed_only: '仅喂食（元）', step_price: '时长每档加价（元）',
-        holiday_extra: '节日加价（元）',
-      },
-      DOG_COUNT_LABELS: {
-        base_minutes: '含时长（分钟）', step_minutes: '每档时长（分钟）', max_minutes: '最长时长（分钟）',
-        familiar_free_orders: '免熟悉费订单数', distance_threshold_km: '距离阈值（km）',
-      },
-    }
-  },
-}
-</script>
-
 <style scoped>
 .toolbar { display: flex; align-items: center; justify-content: space-between; background: #fff; padding: 16px; border-radius: 8px; margin-bottom: 12px; }
 .title { font-size: 16px; font-weight: 600; }
 .note { color: #6b7280; font-size: 13px; margin-bottom: 12px; line-height: 1.6; }
 .rules-preview { display: block; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #6b7280; }
+.svc { display: flex; align-items: center; gap: 8px; }
+.svc-name { font-weight: 600; font-size: 14px; color: #1f2937; }
+.price { font-weight: 600; color: #0f7f78; }
+.sum-line { font-size: 13px; color: #374151; line-height: 1.7; }
+.expand-box { padding: 8px 16px 16px 48px; }
+.expand-sec { margin-bottom: 14px; }
+.expand-title { font-size: 13px; font-weight: 600; color: #111827; margin-bottom: 8px; }
+.kv-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 24px; }
+.kv { display: flex; gap: 8px; font-size: 13px; line-height: 1.6; }
+.kv-label { color: #6b7280; flex-shrink: 0; }
+.kv-value { color: #1f2937; }
+.mtag { margin: 0 8px 6px 0; }
+.rules-json { display: block; background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 12px; font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5; color: #374151; white-space: pre-wrap; word-break: break-all; max-height: 260px; overflow: auto; }
 .hint { color: #9aa3ad; font-size: 12px; margin-left: 12px; line-height: 1.5; }
 .err { color: #dc2626; font-size: 12px; margin-top: 4px; }
 .rows { display: flex; flex-direction: column; gap: 8px; width: 100%; }

@@ -251,7 +251,7 @@ async function loadCommunities() {
 
 function chooseAddress() {
   if (!user.hasAddress) {
-    openAddressEdit()
+    openAddressAdd()
     return
   }
   showAddressPicker.value = true
@@ -265,20 +265,39 @@ function selectAddress(id: number) {
 }
 
 /**
- * 打开地址编辑：已有地址预填并走更新接口，没有地址则走新增。
- * id 必须显式传数字：模板里若写 `@tap="openAddressEdit"` 会把事件对象当 id 传入，
- * 导致匹配不到地址而误走新增，这里用 typeof 兜底。
+ * 新增地址：清空表单、editingAddressId 固定为 0，绝不预填当前地址。
+ * 与编辑彻底分开，避免靠"有没有传 id"猜意图导致点新增却弹出编辑。
+ */
+function openAddressAdd() {
+  editingAddressId.value = 0
+  addressForm.community = ''
+  addressForm.house_no = ''
+  addressForm.contact_name = ''
+  addressForm.contact_phone = ''
+  addressCheckMsg.value = null
+  showAddressPicker.value = false
+  showAddressEdit.value = true
+}
+
+/**
+ * 编辑指定地址：必须显式传数字 id，找不到则安全降级为新增。
+ * 模板里若写 `@tap="openAddressEdit"` 会把事件对象当 id 传入，这里用 typeof 兜底。
  */
 function openAddressEdit(id?: number) {
-  const targetId = typeof id === 'number' ? id : 0
-  const a = targetId
-    ? user.addresses.find((x) => x.id === targetId)
-    : user.currentAddress
-  editingAddressId.value = a?.id || 0
-  addressForm.community = a?.community || ''
-  addressForm.house_no = a?.house_no || ''
-  addressForm.contact_name = a?.contact_name || ''
-  addressForm.contact_phone = a?.contact_phone || ''
+  if (typeof id !== 'number') {
+    openAddressAdd()
+    return
+  }
+  const a = user.addresses.find((x) => x.id === id)
+  if (!a) {
+    openAddressAdd()
+    return
+  }
+  editingAddressId.value = a.id
+  addressForm.community = a.community
+  addressForm.house_no = a.house_no
+  addressForm.contact_name = a.contact_name
+  addressForm.contact_phone = a.contact_phone
   addressCheckMsg.value = null
   showAddressPicker.value = false
   showAddressEdit.value = true
@@ -639,7 +658,7 @@ async function startPay(orderNo: string) {
         </view>
         <view class="sheet-actions">
           <view class="btn-ghost half" @tap="showAddressPicker = false">取消</view>
-          <view class="btn-primary half" @tap="openAddressEdit()">＋ 新增地址</view>
+          <view class="btn-primary half" @tap="openAddressAdd">＋ 新增地址</view>
         </view>
       </view>
     </view>

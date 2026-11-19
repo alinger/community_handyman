@@ -379,6 +379,11 @@ async function onExport() {
       <el-table-column label="服务方" min-width="110">
         <template #default="{ row }">{{ row.provider_nickname || (row.provider_id ? `ID ${row.provider_id}` : '未派单') }}</template>
       </el-table-column>
+      <el-table-column label="服务地址" min-width="150">
+        <template #default="{ row }">
+          {{ row.address ? `${row.address.community} ${row.address.house_no}` : '-' }}
+        </template>
+      </el-table-column>
       <el-table-column label="联系人" min-width="150">
         <template #default="{ row }">
           {{ row.address?.contact_name || '-' }}<br /><span class="slot-text">{{ row.address?.contact_phone || '' }}</span>

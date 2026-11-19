@@ -33,16 +33,18 @@ const acting = ref(false)
 onShow(async () => {
   if (!ensureAuth()) return
   await user.ensureLogin()
-  // 服务方身份校验：住户误入时弹提示并跳回
-  if (user.role !== 'provider') {
+  // 权限校验：未通过认证的用户误入时提示去申请
+  if (!user.isProvider) {
     uni.showModal({
-      title: '身份不符',
-      content: '当前是住户账号，请先在「我的」里切换为服务方',
+      title: '还没有服务方权限',
+      content: '请先在「我的 - 成为服务方」提交资质认证，通过后即可接单',
       showCancel: false,
       success: () => uni.reLaunch({ url: '/pages/index/index' }),
     })
     return
   }
+  // 有权限但从住户视角点进来：顺手把视角切过去，避免底部导航与页面内容不一致
+  if (!user.isProviderView) user.switchView('provider')
   await Promise.all([reload(), loadOpenCount()])
 })
 

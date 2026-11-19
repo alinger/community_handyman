@@ -28,8 +28,9 @@ const loading = ref(true)
 const acting = ref(false)
 const uploading = ref(false)
 
-/** 服务方视角：接单后可推进节点、上传记录 */
-const isProvider = computed(() => user.role === 'provider')
+/** 服务方视角：接单后可推进节点、上传记录。
+    用视角判断而非 role：已认证用户切回住户视角时，看自己的订单不该出现推进按钮 */
+const isProvider = computed(() => user.isProviderView)
 
 const slotText = computed(() => {
   const code = order.value?.slot_code || ''

@@ -19,7 +19,10 @@ const actingNo = ref('') // 正在抢单的订单号，按钮转圈用
 onShow(async () => {
   if (!ensureAuth()) return
   await user.ensureLogin()
-  if (user.role !== 'provider') return
+  // 无服务方权限不加载；有权限但从住户视角进来时切到服务方视角，
+  // 否则底部导航显示的是住户三项，与当前页面不一致
+  if (!user.isProvider) return
+  if (!user.isProviderView) user.switchView('provider')
   reload()
 })
 

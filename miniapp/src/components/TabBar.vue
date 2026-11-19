@@ -1,7 +1,11 @@
 <script setup lang="ts">
 /**
- * 自定义底部导航，按角色分流：
- * 住户：首页 / 订单 / 我的；服务方：任务 / 接单池 / 我的。
+ * 自定义底部导航，按「视角」分流而不是按权限分流：
+ * 住户视角：首页 / 订单 / 我的；服务方视角：任务 / 接单池 / 我的。
+ *
+ * 服务方本身也是住户（也要给自己下单），所以已认证用户在这里多一个
+ * 中间的「切换」按钮，切的是 viewMode（看哪一侧），不动 role（有没有权限）。
+ * 未认证用户中间不渲染该按钮，保持三项等分。
  *
  * 图标用 CSS 画（房子、清单、人像），不引入图片资源：
  * 小程序不支持 <svg> 标签，图标字体又要多带字体文件，
@@ -14,7 +18,7 @@ const props = defineProps<{ current: string }>()
 const user = useUserStore()
 
 const items = computed(() => {
-  if (user.role === 'provider') {
+  if (user.isProviderView) {
     return [
       { key: 'ptasks', label: '任务', path: '/pages/provider/tasks', icon: 'list' },
       { key: 'pool', label: '接单池', path: '/pages/provider/pool', icon: 'house' },
@@ -28,41 +32,63 @@ const items = computed(() => {
   ]
 })
 
+/** 已认证用户才能看到视角切换 */
+const canSwitch = computed(() => user.isProvider)
+
 function go(item: { key: string; path: string }) {
   if (item.key === props.current) return
   uni.reLaunch({ url: item.path })
+}
+
+function onSwitch() {
+  user.toggleView()
 }
 </script>
 
 <template>
   <view class="tabbar">
+    <!-- 前两项 -->
     <view
-      v-for="item in items"
+      v-for="item in items.slice(0, 2)"
       :key="item.key"
       class="tab"
       :class="{ active: item.key === current }"
       @tap="go(item)"
     >
-      <!-- 房子 -->
       <view v-if="item.icon === 'house'" class="ico house">
         <view class="roof" />
         <view class="wall" />
       </view>
-
-      <!-- 清单 -->
-      <view v-else-if="item.icon === 'list'" class="ico list">
+      <view v-else class="ico list">
         <view class="line" />
         <view class="line" />
         <view class="line" />
       </view>
+      <text class="label">{{ item.label }}</text>
+    </view>
 
-      <!-- 人像 -->
-      <view v-else class="ico user">
+    <!-- 中间：身份切换（仅已认证服务方可见） -->
+    <view v-if="canSwitch" class="tab switch-tab" @tap="onSwitch">
+      <view class="switch-btn">
+        <view class="swap">
+          <view class="arrow up" />
+          <view class="arrow down" />
+        </view>
+      </view>
+      <text class="label switch-label">{{ user.isProviderView ? '切到住户' : '切到服务方' }}</text>
+    </view>
+
+    <!-- 我的 -->
+    <view
+      class="tab"
+      :class="{ active: items[2].key === current }"
+      @tap="go(items[2])"
+    >
+      <view class="ico user">
         <view class="head" />
         <view class="shoulder" />
       </view>
-
-      <text class="label">{{ item.label }}</text>
+      <text class="label">{{ items[2].label }}</text>
     </view>
   </view>
 </template>
@@ -105,6 +131,71 @@ function go(item: { key: string; path: string }) {
 
 .tab.active .label {
   font-weight: 600;
+}
+
+/* ---- 身份切换：中间凸起圆形按钮 ---- */
+.switch-tab {
+  flex: 0 0 150rpx;
+  position: relative;
+  height: 108rpx;
+}
+
+.switch-btn {
+  position: absolute;
+  left: 50%;
+  top: -26rpx;
+  transform: translateX(-50%);
+  width: 84rpx;
+  height: 84rpx;
+  border-radius: 50%;
+  background: var(--brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6rpx 18rpx rgba(15, 127, 120, 0.32);
+  border: 4rpx solid #fff;
+}
+
+.switch-btn:active {
+  transform: translateX(-50%) scale(0.94);
+}
+
+.swap {
+  display: flex;
+  flex-direction: column;
+  gap: 5rpx;
+}
+
+.arrow {
+  width: 26rpx;
+  height: 26rpx;
+  border-right: 4rpx solid #fff;
+  border-bottom: 4rpx solid #fff;
+  box-sizing: border-box;
+}
+
+.arrow.up {
+  transform: rotate(-135deg);
+  margin-bottom: -6rpx;
+}
+
+.arrow.down {
+  transform: rotate(45deg);
+  margin-top: -6rpx;
+}
+
+.switch-label {
+  /* 与两侧 tab 的 label 同高：两侧是「图标 40rpx + gap 8rpx + 文字」垂直居中，
+     这里直接绝对贴底，保证基线一致 */
+  position: absolute;
+  bottom: 14rpx;
+  left: 0;
+  right: 0;
+  text-align: center;
+  color: var(--brand-dark);
+  font-size: 20rpx;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
 /* ---- 房子 ---- */

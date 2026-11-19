@@ -20,6 +20,7 @@ import {
 } from '@/utils/request'
 
 const KEY_ROLE = 'ch_role'
+const KEY_VIEW = 'ch_view_mode'
 
 /**
  * 用户与地址状态。
@@ -28,8 +29,11 @@ const KEY_ROLE = 'ch_role'
  * 请求层用 Authorization: Bearer 带上。token 与 userId 都落在本地缓存，
  * 冷启动时 isLoggedIn 直接读缓存判断，不需要先请求一次后端。
  *
- * 开发便利：H5 地址栏带 ?as=provider|user 时会自动走 /dev/login 造出对应身份，
- * 该路由后端只在 dev 注册，生产环境自然失效。
+ * 身份与视角是两件事，不能混：
+ *   role     权限，来自后端 users.role，只有审核通过才变 provider，决定「能不能」进服务方端；
+ *   viewMode 视角，纯前端偏好，决定「现在在看」住户侧还是服务方侧。
+ * 服务方本身也是住户（也要给自己下单），所以已认证用户可以自由切视角，
+ * 切换只改 viewMode 不动 role —— 既不会提权也不会丢权限。
  */
 export const useUserStore = defineStore('user', {
   state: () => ({
@@ -38,6 +42,8 @@ export const useUserStore = defineStore('user', {
     nickname: '',
     phone: '',
     role: (uni.getStorageSync(KEY_ROLE) as string) || 'user',
+    /** 当前视角：user=住户侧，provider=服务方侧。未认证时恒为 user */
+    viewMode: (uni.getStorageSync(KEY_VIEW) as string) || 'user',
     addresses: [] as Address[],
     currentAddressId: 0,
     ready: false,
@@ -48,6 +54,14 @@ export const useUserStore = defineStore('user', {
     /** 是否已登录：有 token 才算，光有 userId 是历史联调残留 */
     isLoggedIn(state): boolean {
       return !!state.token && !!state.userId
+    },
+    /** 是否具备服务方权限（能否进服务方端） */
+    isProvider(state): boolean {
+      return state.role === 'provider'
+    },
+    /** 当前是否处于服务方视角：权限与视角同时满足才算 */
+    isProviderView(state): boolean {
+      return state.role === 'provider' && state.viewMode === 'provider'
     },
     currentAddress(state): Address | undefined {
       return state.addresses.find((a) => a.id === state.currentAddressId) || state.addresses[0]
@@ -101,7 +115,20 @@ export const useUserStore = defineStore('user', {
       setToken(s.token)
       setUserId(s.user.user_id)
       uni.setStorageSync(KEY_ROLE, this.role)
+      this.syncViewMode()
       this.ready = true
+    },
+
+    /**
+     * 校正视角与权限的一致性：
+     * 没有服务方权限时视角必须是住户侧，否则会出现「进入服务方界面但接口全 403」。
+     * 有权限时保留上次选择（下次登录直接回到上次看的那一侧）。
+     */
+    syncViewMode() {
+      if (this.role !== 'provider' && this.viewMode !== 'user') {
+        this.viewMode = 'user'
+        uni.setStorageSync(KEY_VIEW, 'user')
+      }
     },
 
     async login(phone: string, password: string) {
@@ -114,6 +141,28 @@ export const useUserStore = defineStore('user', {
       const s = await apiRegister({ phone, password, nickname })
       this.applySession(s)
       return s
+    },
+
+    /**
+     * 切换视角：住户侧 ↔ 服务方侧。
+     * 只改本地偏好，不改 role、不请求后端 —— 权限始终由 users.role 决定。
+     * 没有服务方权限时拒绝切换，返回 false 由调用方提示。
+     */
+    switchView(mode: 'user' | 'provider'): boolean {
+      if (mode === 'provider' && !this.isProvider) return false
+      this.viewMode = mode
+      uni.setStorageSync(KEY_VIEW, mode)
+      return true
+    },
+
+    /** 视角在家页与工作台之间跳一次，配合 TabBar 的中间按钮 */
+    toggleView(): 'user' | 'provider' {
+      const next = this.isProviderView ? 'user' : 'provider'
+      this.switchView(next)
+      uni.reLaunch({
+        url: next === 'provider' ? '/pages/provider/tasks' : '/pages/index/index',
+      })
+      return next
     },
 
     /** 加载地址列表，默认项以后端 is_default 为准（列表已按默认优先排序） */
@@ -163,6 +212,7 @@ export const useUserStore = defineStore('user', {
       if (me.role && me.role !== this.role) {
         this.role = me.role
         uni.setStorageSync(KEY_ROLE, me.role)
+        this.syncViewMode()
       }
       return me
     },
@@ -185,9 +235,11 @@ export const useUserStore = defineStore('user', {
       this.currentAddressId = 0
       this.ready = false
       this.role = 'user'
+      this.viewMode = 'user'
       clearToken()
       clearUserId()
       uni.removeStorageSync(KEY_ROLE)
+      uni.removeStorageSync(KEY_VIEW)
     },
   },
 })

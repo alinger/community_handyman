@@ -37,7 +37,9 @@ onShow(async () => {
   if (!ensureAuth()) return
   try {
     await user.ensureLogin()
-    if (user.role === 'provider') {
+    // 只有「服务方视角」才跳工作台；已认证但处于住户视角时正常展示首页，
+    // 否则服务方永远无法给自己下单
+    if (user.isProviderView) {
       uni.reLaunch({ url: '/pages/provider/tasks' })
       return
     }

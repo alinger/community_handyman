@@ -51,6 +51,25 @@ function goProviderApply() {
 function goProviderWork() {
   uni.reLaunch({ url: '/pages/provider/tasks' })
 }
+
+/**
+ * 切换身份视角。已认证用户既是住户也是服务方，
+ * 这里切的是「看哪一侧」，不动后端权限。
+ */
+function onSwitchView() {
+  if (!user.isProvider) {
+    uni.showModal({
+      title: '还没有服务方权限',
+      content: '需先提交资质认证，通过后即可切换为服务方接单',
+      confirmText: '去认证',
+      success: (r) => {
+        if (r.confirm) goProviderApply()
+      },
+    })
+    return
+  }
+  user.toggleView()
+}
 </script>
 
 <template>
@@ -106,6 +125,16 @@ function goProviderWork() {
           <text class="chev">›</text>
         </view>
       </view>
+      <!-- 身份切换：已认证用户可在住户/服务方两个视角间来回切 -->
+      <view class="menu-item" @tap="onSwitchView">
+        <text>切换身份</text>
+        <view class="menu-right">
+          <text class="menu-value">
+            {{ user.isProvider ? (user.isProviderView ? '当前：服务方' : '当前：住户') : '需先认证' }}
+          </text>
+          <text class="chev">›</text>
+        </view>
+      </view>
     </view>
 
     <!-- 关于与条款 -->
@@ -136,7 +165,7 @@ function goProviderWork() {
       </view>
     </view>
 
-
+    <TabBar current="mine" />
   </view>
 </template>
 

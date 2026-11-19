@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import TabBar from '@/components/TabBar.vue'
 import { useUserStore } from '@/store/user'
@@ -14,18 +14,48 @@ const menuOpen = ref(false)
  * 服务入口。
  * 首页不展示价格：设计稿把价格信息留给了预约页的费用估算，
  * 首页只承担「介绍与入口」的作用。
+ * 图标改为 CSS 绘制的几何图形 —— emoji 在不同机型上字重、色彩差异很大，
+ * 三张白卡并排时视觉噪音明显，用统一描边图标更稳。
  */
 const services = [
-  { type: 'garbage', name: '代倒垃圾', icon: '🗑', desc: '专业准时，便捷省心', tone: 'green' },
-  { type: 'dogwalk', name: '遛宠服务', icon: '🐾', desc: '贴心陪伴，放心出行', tone: 'amber' },
-  { type: 'accompany', name: '陪诊服务', icon: '🏥', desc: '贴心陪同，安心就医', tone: 'blue' },
+  {
+    type: 'garbage',
+    name: '代倒垃圾',
+    desc: '专业准时 · 便捷省心',
+    tone: 'green',
+    tag: '按袋计费',
+  },
+  {
+    type: 'dogwalk',
+    name: '遛宠服务',
+    desc: '贴心陪伴 · 放心出行',
+    tone: 'amber',
+    tag: '20 分钟起',
+  },
+  {
+    type: 'accompany',
+    name: '陪诊服务',
+    desc: '贴心陪同 · 安心就医',
+    tone: 'blue',
+    tag: '按项计价',
+  },
 ]
 
 const steps = [
-  { icon: '📋', label: '选服务' },
-  { icon: '📅', label: '约时间' },
-  { icon: '🏠', label: '上门服务' },
+  { no: '1', label: '选服务', desc: '挑一项' },
+  { no: '2', label: '约时间', desc: '选时段' },
+  { no: '3', label: '上门服务', desc: '在家等' },
 ]
+
+/** 问候语随时段变化，比固定的「把琐事交给我们」更有温度 */
+const greeting = computed(() => {
+  const h = new Date().getHours()
+  if (h < 6) return '夜深了'
+  if (h < 11) return '早上好'
+  if (h < 14) return '中午好'
+  if (h < 18) return '下午好'
+  return '晚上好'
+})
 
 onMounted(() => {
   // 自定义导航栏需要自己避开状态栏
@@ -57,6 +87,10 @@ function goMine() {
   uni.reLaunch({ url: '/pages/mine/index' })
 }
 
+function goOrders() {
+  uni.reLaunch({ url: '/pages/order/list' })
+}
+
 /** 汉堡菜单：常用入口侧边抽屉，替代原先的「功能开发中」空提示 */
 function openMenu() {
   menuOpen.value = true
@@ -84,7 +118,7 @@ const menuItems = [
 
 <template>
   <view class="page">
-    <!-- 自定义导航：汉堡 / 标题 / 头像 -->
+    <!-- 顶部导航：汉堡 / 标题 / 头像，背景与头部渐变衔接 -->
     <view class="nav" :style="{ paddingTop: statusBarHeight + 'px' }">
       <view class="nav-inner">
         <view class="nav-btn" @tap="openMenu">
@@ -92,31 +126,41 @@ const menuItems = [
         </view>
         <text class="nav-title">小区好帮手</text>
         <view class="nav-btn" @tap="goMine">
-          <view class="avatar"><view class="head" /><view class="shoulder" /></view>
+          <view class="avatar">
+            <text class="avatar-char">{{ (user.nickname || '住')[0] }}</text>
+          </view>
         </view>
       </view>
     </view>
 
-    <!-- 定位 + 主标题 -->
-    <view class="intro">
-      <view class="locate" @tap="goMine">
-        <view class="pin" />
-        <text class="locate-text">{{ user.currentAddress?.community || '示例小区' }}</text>
-        <text class="caret">⌄</text>
+    <!-- 头部：问候 + 主标题（定位行已按要求隐藏） -->
+    <view class="hero">
+      <view class="hero-greet">
+        <text class="greet-text">{{ greeting }}</text>
+        <text v-if="user.nickname" class="greet-name">，{{ user.nickname }}</text>
       </view>
-      <view class="hero-title">把琐事交给我们</view>
-      <view class="hero-sub">家门口的安心服务</view>
+      <view class="hero-title">把琐事<text class="hl">交给我们</text></view>
+      <view class="hero-sub">代倒垃圾 · 遛宠 · 陪诊，家门口的安心服务</view>
     </view>
 
-    <!-- 插画 banner -->
+    <!-- 主视觉卡片：叠在渐变上与下方内容形成层次 -->
     <view class="banner">
+      <view class="banner-glow" />
       <view class="banner-copy">
-        <view class="banner-title">邻里生活，<br />轻松一点</view>
-        <view class="banner-rule" />
-        <view class="banner-sub">专业服务 · 温暖社区</view>
+        <view class="banner-badge">社区专享</view>
+        <view class="banner-title">邻里生活<br />轻松一点</view>
+        <view class="banner-sub">12 个小区 · 专业服务 · 温暖社区</view>
       </view>
-      <!-- 设计稿此处为 3D 插画，暂无设计资源，用 emoji 组合占位 -->
-      <view class="banner-art">🏘️</view>
+      <view class="banner-art">
+        <view class="art-house">
+          <view class="art-roof" />
+          <view class="art-body">
+            <view class="art-door" />
+            <view class="art-window" />
+          </view>
+        </view>
+        <view class="art-tree" />
+      </view>
     </view>
 
     <!-- 三个服务入口 -->
@@ -128,43 +172,71 @@ const menuItems = [
         :class="`tone-${s.tone}`"
         @tap="goCreate(s.type)"
       >
-        <view class="svc-icon">{{ s.icon }}</view>
+        <view class="svc-top">
+          <view class="svc-icon">
+            <!-- 垃圾桶 -->
+            <view v-if="s.type === 'garbage'" class="ic-trash">
+              <view class="lid" />
+              <view class="body">
+                <view class="rib" /><view class="rib" />
+              </view>
+            </view>
+            <!-- 爪印 -->
+            <view v-else-if="s.type === 'dogwalk'" class="ic-paw">
+              <view class="pad" />
+              <view class="toe t1" /><view class="toe t2" /><view class="toe t3" /><view class="toe t4" />
+            </view>
+            <!-- 急救箱 -->
+            <view v-else class="ic-aid">
+              <view class="aid-cross" />
+            </view>
+          </view>
+          <view class="svc-tag">{{ s.tag }}</view>
+        </view>
         <view class="svc-name">{{ s.name }}</view>
         <view class="svc-desc">{{ s.desc }}</view>
+        <view class="svc-arrow">立即预约 ›</view>
       </view>
     </view>
 
     <!-- 提示条 -->
     <view class="notice">
-      <text class="notice-icon">🐕</text>
+      <view class="notice-dot" />
       <text class="notice-text">遛宠需牵引 · 猫咪按习性自愿外出</text>
     </view>
 
     <!-- 预约很简单 -->
     <view class="block-head">
-      <view class="sq green" />
       <text class="block-title">预约很简单</text>
       <view class="block-line" />
     </view>
     <view class="steps">
       <template v-for="(s, i) in steps" :key="s.label">
         <view class="step">
-          <view class="step-icon">{{ s.icon }}</view>
-          <text class="step-label">{{ s.label }}</text>
+          <view class="step-no">{{ s.no }}</view>
+          <view class="step-body">
+            <view class="step-label">{{ s.label }}</view>
+            <view class="step-desc">{{ s.desc }}</view>
+          </view>
         </view>
-        <text v-if="i < steps.length - 1" class="step-arrow">›</text>
+        <view v-if="i < steps.length - 1" class="step-line" />
       </template>
     </view>
 
     <!-- 可预约时段 -->
     <view class="block-head">
-      <view class="sq orange" />
       <text class="block-title">可预约时段</text>
       <view class="block-line" />
+      <text class="block-more" @tap="goOrders">我的订单 ›</text>
     </view>
     <view class="slots">
-      <view v-for="s in SLOTS" :key="s.code" class="slot">{{ s.label }}</view>
+      <view v-for="s in SLOTS" :key="s.code" class="slot">
+        <view class="slot-clock" />
+        <text class="slot-text">{{ s.label }}</text>
+      </view>
     </view>
+
+    <view class="foot-note">三档时段 · 每个时段限量接单，约满自动置灰</view>
 
     <TabBar current="index" />
 
@@ -202,9 +274,11 @@ const menuItems = [
   padding-bottom: 160rpx;
 }
 
-/* ---------- 导航 ---------- */
+/* ---------- 顶部导航 ---------- */
 .nav {
-  background: #fff;
+  background: transparent;
+  position: relative;
+  z-index: 3;
 }
 
 .nav-inner {
@@ -225,9 +299,9 @@ const menuItems = [
 
 .nav-title {
   font-size: 34rpx;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--brand-dark);
-  letter-spacing: 1rpx;
+  letter-spacing: 2rpx;
 }
 
 .burger {
@@ -244,92 +318,119 @@ const menuItems = [
 }
 
 .avatar {
-  width: 44rpx;
-  height: 44rpx;
-  border: 2rpx solid #c9d2d0;
+  width: 56rpx;
+  height: 56rpx;
   border-radius: 50%;
+  background: #fff;
+  border: 2rpx solid rgba(15, 127, 120, 0.18);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2rpx;
+  box-shadow: 0 2rpx 8rpx rgba(15, 127, 120, 0.08);
 }
 
-.avatar .head {
-  width: 11rpx;
-  height: 11rpx;
-  border: 2rpx solid #7d8a88;
-  border-radius: 50%;
-  box-sizing: border-box;
-}
-
-.avatar .shoulder {
-  width: 20rpx;
-  height: 9rpx;
-  border: 2rpx solid #7d8a88;
-  border-bottom: none;
-  border-radius: 12rpx 12rpx 0 0;
-  box-sizing: border-box;
-}
-
-/* ---------- 标题区 ---------- */
-.intro {
-  padding: 24rpx 32rpx 0;
-  background: #fff;
-}
-
-.locate {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.pin {
-  width: 16rpx;
-  height: 16rpx;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
-  background: var(--brand);
-  flex-shrink: 0;
-}
-
-.locate-text {
+.avatar-char {
   font-size: 26rpx;
-  color: var(--text-sub);
+  font-weight: 700;
+  color: var(--brand-dark);
 }
 
-.caret {
+/* ---------- 头部问候 ---------- */
+/* 渐变铺满「导航 + 头部」整块，靠 .page 的背景色在下方接回浅灰。
+   不用负 margin 把内容拉到导航下面 —— 那样要靠 z-index 抢层，
+   滚动或自定义状态栏高度变化时容易露出空白。 */
+.nav,
+.hero {
+  background: linear-gradient(180deg, #e8f6f3 0%, #f4faf8 100%);
+}
+
+.hero {
+  padding: 8rpx 36rpx 30rpx;
+}
+
+.hero-greet {
+  display: flex;
+  align-items: baseline;
+  gap: 4rpx;
+}
+
+.greet-text {
   font-size: 24rpx;
-  color: var(--text-light);
-  margin-top: -6rpx;
+  color: var(--brand-dark);
+  font-weight: 500;
+  letter-spacing: 1rpx;
+}
+
+.greet-name {
+  font-size: 24rpx;
+  color: var(--text-sub);
+  max-width: 300rpx;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .hero-title {
-  margin-top: 18rpx;
-  font-size: 58rpx;
+  margin-top: 14rpx;
+  font-size: 54rpx;
   font-weight: 800;
   letter-spacing: -1rpx;
-  color: #1a1d21;
-  line-height: 1.2;
+  color: #16201d;
+  line-height: 1.25;
+}
+
+/* 高亮不换字号，只换色 + 底部一条粗下划线，
+   避免「交给我们」看起来像另一个标题。
+   下划线用绝对定位贴在文字基线下方，不用 z-index:-1 —— 
+   -1 会让它沉到父级背景之后，在部分渲染器上表现为穿透文字。 */
+.hl {
+  color: var(--brand);
+  position: relative;
+  display: inline-block;
+}
+
+.hl::after {
+  content: '';
+  position: absolute;
+  left: -2rpx;
+  right: -2rpx;
+  bottom: 2rpx;
+  height: 12rpx;
+  background: rgba(15, 127, 120, 0.16);
+  border-radius: 6rpx;
 }
 
 .hero-sub {
-  margin-top: 12rpx;
-  font-size: 26rpx;
+  margin-top: 14rpx;
+  font-size: 24rpx;
   color: var(--text-sub);
+  letter-spacing: 0.5rpx;
 }
 
-/* ---------- banner ---------- */
+/* ---------- 主视觉卡片 ---------- */
 .banner {
   position: relative;
-  margin: 24rpx 24rpx 0;
-  height: 250rpx;
-  border-radius: 22rpx;
-  background: linear-gradient(135deg, #87c9bd 0%, #cbeae3 100%);
+  /* 负 margin 让卡片压在渐变区下沿，形成「浮起」的层次感 */
+  margin: -14rpx 24rpx 0;
+  height: 268rpx;
+  border-radius: 28rpx;
+  background: linear-gradient(135deg, #12867e 0%, #3fa89c 55%, #7fc9bd 100%);
   overflow: hidden;
   display: flex;
   align-items: center;
-  padding: 0 32rpx;
+  padding: 0 36rpx;
+  box-shadow: 0 14rpx 36rpx rgba(15, 127, 120, 0.22);
+}
+
+/* 右上角高光，让纯色渐变有质感 */
+.banner-glow {
+  position: absolute;
+  right: -70rpx;
+  top: -90rpx;
+  width: 300rpx;
+  height: 300rpx;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0) 70%);
 }
 
 .banner-copy {
@@ -337,63 +438,169 @@ const menuItems = [
   z-index: 2;
 }
 
-.banner-title {
-  font-size: 44rpx;
-  font-weight: 800;
-  color: #fff;
-  line-height: 1.3;
+.banner-badge {
+  display: inline-block;
+  font-size: 19rpx;
+  color: #0c5f59;
+  background: rgba(255, 255, 255, 0.88);
+  padding: 4rpx 14rpx;
+  border-radius: 20rpx;
   letter-spacing: 1rpx;
-  text-shadow: 0 2rpx 8rpx rgba(15, 127, 120, 0.18);
 }
 
-.banner-rule {
-  width: 56rpx;
-  height: 3rpx;
-  background: rgba(255, 255, 255, 0.85);
-  margin: 18rpx 0 14rpx;
+.banner-title {
+  margin-top: 14rpx;
+  font-size: 42rpx;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.28;
+  letter-spacing: 1rpx;
+  text-shadow: 0 2rpx 10rpx rgba(8, 60, 56, 0.18);
 }
 
 .banner-sub {
-  font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.95);
-  letter-spacing: 1rpx;
+  margin-top: 14rpx;
+  font-size: 21rpx;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.5rpx;
 }
 
+/* 用 CSS 拼的房子 + 树，替代 emoji 占位图。
+   树用两个叠起来的圆做树冠 + 一根树干，比纯三角形更像树；
+   摆在房子左侧且略矮，形成前后层次。 */
 .banner-art {
   position: absolute;
-  right: 18rpx;
-  bottom: -6rpx;
-  font-size: 168rpx;
-  line-height: 1;
-  opacity: 0.96;
+  right: 16rpx;
+  bottom: 0;
+  width: 262rpx;
+  height: 226rpx;
   z-index: 1;
+}
+
+.art-house {
+  position: absolute;
+  right: 14rpx;
+  bottom: 0;
+  width: 136rpx;
+  height: 152rpx;
+}
+
+.art-roof {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 76rpx solid transparent;
+  border-right: 76rpx solid transparent;
+  border-bottom: 58rpx solid #fff;
+}
+
+.art-body {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 118rpx;
+  height: 100rpx;
+  background: #fff;
+  border-radius: 5rpx;
+}
+
+.art-door {
+  position: absolute;
+  bottom: 0;
+  left: 24rpx;
+  width: 34rpx;
+  height: 54rpx;
+  background: #35a094;
+  border-radius: 8rpx 8rpx 0 0;
+}
+
+.art-window {
+  position: absolute;
+  top: 24rpx;
+  right: 26rpx;
+  width: 30rpx;
+  height: 30rpx;
+  background: #7fc9bd;
+  border-radius: 4rpx;
+}
+
+/* 树：树干 + 两个圆树冠。整体比房子矮一截，且离左边缘留出余量，
+   否则树冠会贴到卡片圆角上被裁掉 */
+.art-tree {
+  position: absolute;
+  left: 34rpx;
+  bottom: 0;
+  width: 62rpx;
+  height: 132rpx;
+}
+
+.art-tree::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 10rpx;
+  height: 38rpx;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 3rpx;
+}
+
+.art-tree::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 28rpx;
+  transform: translateX(-50%);
+  width: 58rpx;
+  height: 58rpx;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.48);
+  /* 上方再叠一个小圆，形成圆润的树冠轮廓 */
+  box-shadow: 0 -26rpx 0 -10rpx rgba(255, 255, 255, 0.48);
 }
 
 /* ---------- 服务入口 ---------- */
 .services {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16rpx;
+  gap: 14rpx;
   padding: 0 24rpx;
-  margin-top: 20rpx;
+  margin-top: 22rpx;
 }
 
 .svc {
   background: #fff;
-  border-radius: 20rpx;
-  padding: 26rpx 12rpx 24rpx;
-  text-align: center;
+  border-radius: 22rpx;
+  padding: 22rpx 16rpx 20rpx;
   min-width: 0;
+  box-shadow: 0 4rpx 16rpx rgba(24, 48, 44, 0.05);
+  transition: transform 0.16s ease;
+}
+
+.svc:active {
+  transform: scale(0.97);
+}
+
+.svc-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 14rpx;
 }
 
 .svc-icon {
-  width: 88rpx;
-  height: 88rpx;
-  margin: 0 auto 14rpx;
+  width: 76rpx;
+  height: 76rpx;
   border-radius: 50%;
-  font-size: 46rpx;
-  line-height: 88rpx;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .tone-green .svc-icon {
@@ -408,35 +615,208 @@ const menuItems = [
   background: #e6effa;
 }
 
+/* 小标签，比描述行更能一眼区分计费方式 */
+.svc-tag {
+  font-size: 17rpx;
+  padding: 3rpx 10rpx;
+  border-radius: 16rpx;
+  white-space: nowrap;
+}
+
+.tone-green .svc-tag {
+  color: #0b6b66;
+  background: #e4f3f0;
+}
+
+.tone-amber .svc-tag {
+  color: #a8600d;
+  background: #fdf0dd;
+}
+
+.tone-blue .svc-tag {
+  color: #2c5c94;
+  background: #e6effa;
+}
+
 .svc-name {
   font-size: 27rpx;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text);
 }
 
 .svc-desc {
   margin-top: 6rpx;
-  font-size: 20rpx;
+  font-size: 19rpx;
   color: var(--text-light);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.svc-arrow {
+  margin-top: 14rpx;
+  font-size: 20rpx;
+  font-weight: 600;
+}
+
+.tone-green .svc-arrow {
+  color: #0b6b66;
+}
+
+.tone-amber .svc-arrow {
+  color: #b45309;
+}
+
+.tone-blue .svc-arrow {
+  color: #2c5c94;
+}
+
+/* ---- 垃圾桶图标 ---- */
+.ic-trash {
+  width: 40rpx;
+  height: 42rpx;
+  position: relative;
+  color: #0b6b66;
+}
+
+.ic-trash .lid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6rpx;
+  background: currentColor;
+  border-radius: 3rpx;
+}
+
+.ic-trash .body {
+  position: absolute;
+  top: 10rpx;
+  left: 5rpx;
+  right: 5rpx;
+  bottom: 0;
+  border: 3rpx solid currentColor;
+  border-top: none;
+  border-radius: 0 0 8rpx 8rpx;
+  display: flex;
+  justify-content: center;
+  gap: 6rpx;
+  padding-top: 8rpx;
+}
+
+.ic-trash .rib {
+  width: 3rpx;
+  height: 18rpx;
+  background: currentColor;
+  border-radius: 2rpx;
+}
+
+/* ---- 爪印图标 ---- */
+.ic-paw {
+  width: 44rpx;
+  height: 42rpx;
+  position: relative;
+  color: #a8600d;
+}
+
+.ic-paw .pad {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 26rpx;
+  height: 22rpx;
+  background: currentColor;
+  border-radius: 50% 50% 46% 46%;
+}
+
+.ic-paw .toe {
+  position: absolute;
+  width: 11rpx;
+  height: 13rpx;
+  background: currentColor;
+  border-radius: 50%;
+}
+
+.ic-paw .t1 { left: 0;    top: 8rpx; }
+.ic-paw .t2 { left: 11rpx; top: 0; }
+.ic-paw .t3 { right: 11rpx; top: 0; }
+.ic-paw .t4 { right: 0;   top: 8rpx; }
+
+/* ---- 急救箱图标 ---- */
+.ic-aid {
+  width: 42rpx;
+  height: 38rpx;
+  border: 3rpx solid #2c5c94;
+  border-radius: 8rpx;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.ic-aid::before {
+  content: '';
+  position: absolute;
+  top: -10rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18rpx;
+  height: 8rpx;
+  border: 3rpx solid #2c5c94;
+  border-bottom: none;
+  border-radius: 6rpx 6rpx 0 0;
+  box-sizing: border-box;
+}
+
+.aid-cross {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 18rpx;
+  height: 18rpx;
+}
+
+.aid-cross::before,
+.aid-cross::after {
+  content: '';
+  position: absolute;
+  background: #2c5c94;
+  border-radius: 2rpx;
+}
+
+.aid-cross::before {
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  width: 5rpx;
+  height: 100%;
+}
+
+.aid-cross::after {
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  height: 5rpx;
+  width: 100%;
+}
+
 /* ---------- 提示条 ---------- */
 .notice {
   display: flex;
   align-items: center;
-  gap: 10rpx;
+  gap: 12rpx;
   margin: 18rpx 24rpx 0;
   padding: 16rpx 22rpx;
   background: var(--accent-soft);
-  border: 1rpx solid #f3d9b4;
   border-radius: 14rpx;
 }
 
-.notice-icon {
-  font-size: 24rpx;
+.notice-dot {
+  width: 10rpx;
+  height: 10rpx;
+  border-radius: 50%;
+  background: #e8a33d;
+  flex-shrink: 0;
 }
 
 .notice-text {
@@ -448,72 +828,95 @@ const menuItems = [
 .block-head {
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: 14rpx;
   padding: 0 24rpx;
-  margin: 34rpx 0 18rpx;
-}
-
-.sq {
-  width: 26rpx;
-  height: 26rpx;
-  border-radius: 7rpx;
-}
-
-.sq.green {
-  background: var(--brand);
-}
-
-.sq.orange {
-  background: #e8a33d;
-  border-radius: 50%;
+  margin: 34rpx 0 16rpx;
 }
 
 .block-title {
-  font-size: 29rpx;
-  font-weight: 700;
+  font-size: 30rpx;
+  font-weight: 800;
   color: var(--text);
+  letter-spacing: 0.5rpx;
 }
 
 .block-line {
   flex: 1;
   height: 1rpx;
-  background: #e9ece9;
-  margin-left: 6rpx;
+  background: linear-gradient(90deg, #dde5e2 0%, rgba(221, 229, 226, 0) 100%);
+}
+
+.block-more {
+  font-size: 21rpx;
+  color: var(--brand-dark);
+  flex-shrink: 0;
 }
 
 /* ---------- 三步 ---------- */
 .steps {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   padding: 0 24rpx;
-  gap: 8rpx;
 }
 
 .step {
   flex: 1;
   background: #fff;
   border-radius: 18rpx;
-  padding: 22rpx 8rpx;
-  text-align: center;
+  padding: 20rpx 16rpx;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  min-width: 0;
+  box-shadow: 0 4rpx 14rpx rgba(24, 48, 44, 0.04);
+}
+
+.step-no {
+  width: 38rpx;
+  height: 38rpx;
+  border-radius: 50%;
+  background: var(--brand-tint);
+  color: var(--brand);
+  font-size: 21rpx;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.step-body {
   min-width: 0;
 }
 
-.step-icon {
-  font-size: 36rpx;
-  line-height: 1.2;
-}
-
 .step-label {
-  display: block;
-  margin-top: 10rpx;
   font-size: 24rpx;
+  font-weight: 600;
   color: var(--text);
+  white-space: nowrap;
 }
 
-.step-arrow {
-  color: #c2cbc9;
-  font-size: 32rpx;
+.step-desc {
+  font-size: 18rpx;
+  color: var(--text-light);
+  margin-top: 2rpx;
+  white-space: nowrap;
+}
+
+.step-line {
+  width: 20rpx;
   flex-shrink: 0;
+  position: relative;
+}
+
+.step-line::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 6rpx;
+  right: 6rpx;
+  height: 1rpx;
+  background: #d5dfdc;
 }
 
 /* ---------- 时段 ---------- */
@@ -525,14 +928,63 @@ const menuItems = [
 }
 
 .slot {
-  background: #fffaf2;
-  border: 1rpx solid #f0d6ae;
-  border-radius: 14rpx;
+  background: #fff;
+  border: 1rpx solid #f0e3cc;
+  border-radius: 16rpx;
   padding: 18rpx 0;
-  text-align: center;
-  font-size: 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+}
+
+.slot-clock {
+  width: 22rpx;
+  height: 22rpx;
+  border: 2.5rpx solid #d99a2b;
+  border-radius: 50%;
+  position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+/* 指针画成 L 形（竖的是分针、横的是时针），比一根竖线更像时钟 */
+.slot-clock::after {
+  content: '';
+  position: absolute;
+  top: 3rpx;
+  left: 50%;
+  width: 2.5rpx;
+  height: 7rpx;
+  background: #d99a2b;
+  transform: translateX(-50%);
+  border-radius: 1rpx;
+}
+
+.slot-clock::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6rpx;
+  height: 2.5rpx;
+  background: #d99a2b;
+  transform: translateY(-50%);
+  border-radius: 1rpx;
+}
+
+.slot-text {
+  font-size: 23rpx;
   color: #b45309;
-  font-weight: 500;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.foot-note {
+  text-align: center;
+  font-size: 20rpx;
+  color: var(--text-light);
+  padding: 22rpx 24rpx 8rpx;
 }
 
 /* ---------- 汉堡菜单抽屉 ---------- */

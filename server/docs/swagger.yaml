@@ -53,6 +53,23 @@ definitions:
     - community
     - house_no
     type: object
+  github_com_alinger_community-handyman_server_internal_dto.CopySlotsReq:
+    properties:
+      source_date:
+        example: "2026-11-20"
+        type: string
+      target_dates:
+        example:
+        - "2026-11-21"
+        items:
+          type: string
+        maxItems: 62
+        minItems: 1
+        type: array
+    required:
+    - source_date
+    - target_dates
+    type: object
   github_com_alinger_community-handyman_server_internal_dto.CreateAddressReq:
     properties:
       community:
@@ -264,6 +281,26 @@ definitions:
     - date
     - items
     type: object
+  github_com_alinger_community-handyman_server_internal_dto.SetUserRoleReq:
+    properties:
+      role:
+        enum:
+        - user
+        - provider
+        example: provider
+        type: string
+    required:
+    - role
+    type: object
+  github_com_alinger_community-handyman_server_internal_dto.SetUserStatusReq:
+    properties:
+      status:
+        enum:
+        - 0
+        - 1
+        example: 0
+        type: integer
+    type: object
   github_com_alinger_community-handyman_server_internal_dto.UpdateAddressReq:
     properties:
       community:
@@ -287,6 +324,35 @@ definitions:
     required:
     - community
     - house_no
+    type: object
+  github_com_alinger_community-handyman_server_internal_dto.UpdateAreaReq:
+    properties:
+      community:
+        example: 东方冠郡二期
+        maxLength: 64
+        type: string
+      house_from:
+        example: 1
+        minimum: 0
+        type: integer
+      house_parity:
+        enum:
+        - all
+        - odd
+        - even
+        example: all
+        type: string
+      house_to:
+        example: 89
+        minimum: 0
+        type: integer
+      lane:
+        example: 众安路779弄
+        maxLength: 128
+        type: string
+    required:
+    - community
+    - lane
     type: object
   github_com_alinger_community-handyman_server_internal_dto.UpdateSkuReq:
     properties:
@@ -351,6 +417,34 @@ paths:
       summary: 新增服务范围
       tags:
       - 运营后台
+  /api/admin/areas/{id}:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 范围 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 范围规则
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.UpdateAreaReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 修改服务范围
+      tags:
+      - 运营后台
   /api/admin/areas/{id}/status:
     patch:
       consumes:
@@ -378,6 +472,34 @@ paths:
       security:
       - AdminToken: []
       summary: 启停服务范围
+      tags:
+      - 运营后台
+  /api/admin/export/orders:
+    get:
+      description: 与订单列表同筛选条件；带 BOM，Excel 直接打开不乱码；上限 5000 行
+      parameters:
+      - description: 订单状态
+        in: query
+        name: status
+        type: string
+      - description: 服务类型
+        in: query
+        name: service_type
+        type: string
+      - description: 订单号模糊搜索
+        in: query
+        name: keyword
+        type: string
+      produces:
+      - text/csv
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+      security:
+      - AdminToken: []
+      summary: 订单导出 CSV
       tags:
       - 运营后台
   /api/admin/login:
@@ -466,6 +588,26 @@ paths:
       summary: 派单或改派
       tags:
       - 运营后台
+  /api/admin/orders/{orderNo}/events:
+    get:
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 订单节点回放
+      tags:
+      - 运营后台
   /api/admin/orders/{orderNo}/quote:
     post:
       consumes:
@@ -493,6 +635,26 @@ paths:
       security:
       - AdminToken: []
       summary: 历史陪诊报价（兼容旧订单）
+      tags:
+      - 运营后台
+  /api/admin/orders/{orderNo}/records:
+    get:
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 后台查看服务记录
       tags:
       - 运营后台
   /api/admin/orders/{orderNo}/redeem:
@@ -528,6 +690,37 @@ paths:
       summary: 包月核销
       tags:
       - 运营后台
+  /api/admin/payments:
+    get:
+      parameters:
+      - description: 订单号模糊搜索
+        in: query
+        name: order_no
+        type: string
+      - description: success / closed / refunded
+        in: query
+        name: status
+        type: string
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页条数
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 支付流水列表
+      tags:
+      - 运营后台
   /api/admin/providers:
     get:
       produces:
@@ -542,7 +735,86 @@ paths:
       summary: 可派单服务方列表
       tags:
       - 运营后台
+  /api/admin/records/{id}/file:
+    get:
+      description: 支持 Range；图片浏览器可直接预览
+      parameters:
+      - description: 记录 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+      security:
+      - AdminToken: []
+      summary: 后台下载服务记录文件
+      tags:
+      - 运营后台
+  /api/admin/redemptions:
+    get:
+      parameters:
+      - description: 服务日期 2006-01-02
+        in: query
+        name: date
+        type: string
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页条数
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 月卡核销列表
+      tags:
+      - 运营后台
   /api/admin/refunds:
+    get:
+      description: 含发起人 operator_id 与退款状态，用于跟踪退款结果
+      parameters:
+      - description: 订单号模糊搜索
+        in: query
+        name: order_no
+        type: string
+      - description: pending / success / failed
+        in: query
+        name: status
+        type: string
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页条数
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 退款单列表
+      tags:
+      - 运营后台
     post:
       consumes:
       - application/json
@@ -654,6 +926,133 @@ paths:
       security:
       - AdminToken: []
       summary: 批量设置时段可接单量
+      tags:
+      - 运营后台
+  /api/admin/slots/copy:
+    post:
+      consumes:
+      - application/json
+      description: 覆盖目标日期已有时段 total；源日期无配置时报错
+      parameters:
+      - description: 源日期与目标日期列表
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.CopySlotsReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data.applied 为写入的时段条数
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 复制某天时段配置到多个日期
+      tags:
+      - 运营后台
+  /api/admin/stats:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 运营看板
+      tags:
+      - 运营后台
+  /api/admin/users:
+    get:
+      parameters:
+      - description: user / provider
+        in: query
+        name: role
+        type: string
+      - description: 昵称/openid/手机号模糊搜索
+        in: query
+        name: keyword
+        type: string
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页条数
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 用户/服务方列表
+      tags:
+      - 运营后台
+  /api/admin/users/{id}/role:
+    patch:
+      consumes:
+      - application/json
+      description: 升为 provider 后可被派单；降回 user 后不再出现在派单下拉
+      parameters:
+      - description: 用户 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 目标角色
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.SetUserRoleReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 切换用户角色
+      tags:
+      - 运营后台
+  /api/admin/users/{id}/status:
+    patch:
+      consumes:
+      - application/json
+      description: 封禁后小程序端无法登录
+      parameters:
+      - description: 用户 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 1 正常 / 0 封禁
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.SetUserStatusReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 封禁或解封用户
       tags:
       - 运营后台
   /api/v1/addresses:

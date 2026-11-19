@@ -126,6 +126,37 @@ func (s *RecordService) Open(ctx context.Context, userID uint64, orderNo string,
 	return f, size, rec, nil
 }
 
+// ListForAdmin 后台查看订单服务记录。后台已过 AdminAuth，跳过用户归属校验。
+func (s *RecordService) ListForAdmin(ctx context.Context, orderNo string) ([]model.ServiceRecord, error) {
+	order, err := s.orders.GetByNo(ctx, orderNo)
+	if err != nil {
+		return nil, errs.Wrap(errs.CodeInternal, err)
+	}
+	if order == nil {
+		return nil, errs.Biz(errs.CodeNotFound)
+	}
+	return s.records.ListByOrder(ctx, order.ID)
+}
+
+// OpenForAdmin 后台打开记录文件用于流式读取。
+func (s *RecordService) OpenForAdmin(ctx context.Context, recordID uint64) (io.ReadSeekCloser, int64, *model.ServiceRecord, error) {
+	rec, err := s.records.GetByID(ctx, recordID)
+	if err != nil {
+		return nil, 0, nil, errs.Wrap(errs.CodeInternal, err)
+	}
+	if rec == nil {
+		return nil, 0, nil, errs.Biz(errs.CodeNotFound)
+	}
+	f, size, err := s.store.Open(ctx, rec.ObjectKey)
+	if err != nil {
+		if err == storage.ErrNotFound {
+			return nil, 0, nil, errs.BizMsg(errs.CodeNotFound, "文件已不存在")
+		}
+		return nil, 0, nil, errs.Wrap(errs.CodeInternal, err)
+	}
+	return f, size, rec, nil
+}
+
 // validateUpload 校验媒体类型、扩展名与大小，返回扩展名。
 func validateUpload(mediaType, filename string, size int64, durationSec int) (string, error) {
 	ext := strings.ToLower(filepath.Ext(filename))

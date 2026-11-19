@@ -84,6 +84,19 @@ curl http://127.0.0.1:8080/healthz
 | POST | `/api/admin/refunds` | 退款（**仅 admin 角色**，amount=0 为全额） |
 | POST | `/api/admin/orders/:orderNo/quote` | 历史陪诊报价（兼容金额为 0 的旧订单；新订单自动计价，调用返回 2003） |
 | POST | `/api/admin/orders/:orderNo/redeem` | 包月核销 |
+| GET | `/api/admin/orders/:orderNo/events` | 订单节点回放（操作轨迹） |
+| GET | `/api/admin/orders/:orderNo/records` | 后台查看服务记录 |
+| GET | `/api/admin/records/:id/file` | 后台下载/预览记录文件（鉴权 + Range） |
+| GET | `/api/admin/stats` | 运营看板（今日订单/流水/退款/待派单/状态分布） |
+| GET | `/api/admin/payments` | 支付流水分页（order_no / status 筛选） |
+| GET | `/api/admin/refunds` | 退款单分页（含操作人与退款状态跟踪） |
+| GET | `/api/admin/users` | 用户/服务方分页（role / keyword） |
+| PATCH | `/api/admin/users/:id/role` | 角色切换（user ↔ provider，切换后即可被派单） |
+| PATCH | `/api/admin/users/:id/status` | 封禁/解封（封禁后小程序端拒绝登录） |
+| GET | `/api/admin/redemptions` | 月卡核销记录（按服务日期筛选） |
+| PUT | `/api/admin/areas/:id` | 修改服务范围规则 |
+| POST | `/api/admin/slots/copy` | 时段模板复制（源日配置 → 多个目标日期） |
+| GET | `/api/admin/export/orders` | 订单 CSV 导出（同列表筛选，带 BOM） |
 
 除登录与回调外均需 `X-User-Id` 头（接入微信登录后改为 JWT，只改 `middleware.RequireUser`）。
 

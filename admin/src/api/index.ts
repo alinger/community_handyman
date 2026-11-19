@@ -233,3 +233,150 @@ export const quote = (orderNo: string, amount: number, durationMin: number, note
     duration_min: durationMin,
     note,
   })
+
+// ---------- 财务：支付流水 / 退款单 ----------
+
+export interface AdminPayment {
+  id: number
+  order_no: string
+  transaction_id: string
+  out_trade_no: string
+  amount: number
+  status: string
+  paid_at: string | null
+  created_at: string
+}
+export interface AdminRefund {
+  id: number
+  order_no: string
+  out_refund_no: string
+  refund_id: string
+  amount: number
+  reason: string
+  status: string
+  operator_id: number
+  refunded_at: string | null
+  created_at: string
+}
+
+export const listPayments = (q: { order_no?: string; status?: string; page?: number; size?: number }) => {
+  const p = new URLSearchParams()
+  Object.entries(q).forEach(([k, v]) => {
+    if (v !== undefined && v !== '') p.set(k, String(v))
+  })
+  return request<PageData<AdminPayment>>(`/api/admin/payments?${p.toString()}`)
+}
+export const listRefunds = (q: { order_no?: string; status?: string; page?: number; size?: number }) => {
+  const p = new URLSearchParams()
+  Object.entries(q).forEach(([k, v]) => {
+    if (v !== undefined && v !== '') p.set(k, String(v))
+  })
+  return request<PageData<AdminRefund>>(`/api/admin/refunds?${p.toString()}`)
+}
+
+// ---------- 订单时间线 / 服务记录 ----------
+
+export interface AdminEvent {
+  id: number
+  node: string
+  operator: string
+  operator_id: number | null
+  remark: string
+  created_at: string
+}
+export const listOrderEvents = (orderNo: string) =>
+  request<AdminEvent[]>(`/api/admin/orders/${orderNo}/events`)
+
+export interface AdminRecord {
+  id: number
+  media_type: string
+  size: number
+  duration_sec: number
+  uploader_role: string
+  created_at: string
+  url: string
+}
+export const listOrderRecords = (orderNo: string) =>
+  request<AdminRecord[]>(`/api/admin/orders/${orderNo}/records`)
+/** 带 Bearer 拉取记录文件，返回浏览器可用的 blob URL（关闭预览后需 revoke） */
+export const fetchRecordBlobUrl = async (r: AdminRecord): Promise<string> => {
+  const res = await http.get<Blob>(r.url, { responseType: 'blob' })
+  return URL.createObjectURL(res.data)
+}
+
+// ---------- 数据看板 ----------
+
+export interface AdminStats {
+  today_orders: number
+  today_gmv: number
+  today_refunded: number
+  pending_accept: number
+  unassigned: number
+  in_service: number
+  total_users: number
+  providers: number
+  status_dist: { status: string; count: number }[]
+  service_dist: { service_type: string; count: number }[]
+}
+export const getStats = () => request<AdminStats>('/api/admin/stats')
+
+// ---------- 用户管理 ----------
+
+export interface AdminUserRow {
+  id: number
+  nickname: string
+  openid: string
+  phone: string
+  role: string
+  status: number
+  order_count: number
+  created_at: string
+}
+export const listUsers = (q: { role?: string; keyword?: string; page?: number; size?: number }) => {
+  const p = new URLSearchParams()
+  Object.entries(q).forEach(([k, v]) => {
+    if (v !== undefined && v !== '') p.set(k, String(v))
+  })
+  return request<PageData<AdminUserRow>>(`/api/admin/users?${p.toString()}`)
+}
+export const setUserRole = (id: number, role: 'user' | 'provider') =>
+  request<{ id: number; role: string }>(`/api/admin/users/${id}/role`, 'PATCH', { role })
+export const setUserStatus = (id: number, status: 0 | 1) =>
+  request<{ id: number; status: number }>(`/api/admin/users/${id}/status`, 'PATCH', { status })
+
+// ---------- 月卡核销 / 区域编辑 / 时段复制 / 导出 ----------
+
+export interface AdminRedemption {
+  id: number
+  order_no: string
+  service_date: string
+  operator_id: number
+  remark: string
+  created_at: string
+}
+export const listRedemptions = (q: { date?: string; page?: number; size?: number }) => {
+  const p = new URLSearchParams()
+  Object.entries(q).forEach(([k, v]) => {
+    if (v !== undefined && v !== '') p.set(k, String(v))
+  })
+  return request<PageData<AdminRedemption>>(`/api/admin/redemptions?${p.toString()}`)
+}
+
+export const updateArea = (
+  id: number,
+  data: CreateAreaPayload,
+) => request<{ id: number }>(`/api/admin/areas/${id}`, 'PUT', data)
+
+export const copySlots = (sourceDate: string, targetDates: string[]) =>
+  request<{ applied: number }>('/api/admin/slots/copy', 'POST', {
+    source_date: sourceDate,
+    target_dates: targetDates,
+  })
+
+export const exportOrdersUrl = (q: { status?: string; service_type?: string; keyword?: string }) => {
+  const p = new URLSearchParams()
+  Object.entries(q).forEach(([k, v]) => {
+    if (v !== undefined && v !== '') p.set(k, String(v))
+  })
+  return `/api/admin/export/orders?${p.toString()}`
+}

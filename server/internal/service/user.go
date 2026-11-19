@@ -30,6 +30,10 @@ func (s *UserService) EnsureByOpenID(ctx context.Context, openid, nickname strin
 		return nil, errs.Wrap(errs.CodeInternal, err)
 	}
 	if u != nil {
+		// 封禁账号拒绝登录，已有 token 也无法再换取新会话
+		if u.Banned() {
+			return nil, errs.BizMsg(errs.CodeForbidden, "账号已被封禁，请联系客服")
+		}
 		return u, nil
 	}
 

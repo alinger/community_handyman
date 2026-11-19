@@ -9,7 +9,17 @@ type User struct {
 	Phone       string `gorm:"size:20;not null;default:''" json:"phone"`
 	DefaultArea string `gorm:"size:64;not null;default:''" json:"default_area"`
 	Role        string `gorm:"size:16;not null;default:'user'" json:"role"`
+	Status      int8   `gorm:"not null;default:1" json:"status"`
 }
+
+// UserStatusUser / UserStatusBanned 用户封禁状态。
+const (
+	UserStatusNormal  int8 = 1
+	UserStatusBanned  int8 = 0
+)
+
+// Banned 判断账号是否被封禁。
+func (u User) Banned() bool { return u.Status == UserStatusBanned }
 
 // TableName 固定表名，避免 GORM 复数规则变化导致对不上迁移。
 func (User) TableName() string { return "users" }

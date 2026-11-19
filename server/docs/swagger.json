@@ -68,6 +68,51 @@
                 }
             }
         },
+        "/api/admin/areas/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "修改服务范围",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "范围 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "范围规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.UpdateAreaReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/api/admin/areas/{id}/status": {
             "patch": {
                 "security": [
@@ -109,6 +154,51 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/export/orders": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "与订单列表同筛选条件；带 BOM，Excel 直接打开不乱码；上限 5000 行",
+                "produces": [
+                    "text/csv"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "订单导出 CSV",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "服务类型",
+                        "name": "service_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "订单号模糊搜索",
+                        "name": "keyword",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
                         }
                     }
                 }
@@ -250,6 +340,39 @@
                 }
             }
         },
+        "/api/admin/orders/{orderNo}/events": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "订单节点回放",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/api/admin/orders/{orderNo}/quote": {
             "post": {
                 "security": [
@@ -289,6 +412,39 @@
                 "responses": {
                     "201": {
                         "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/orders/{orderNo}/records": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "后台查看服务记录",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
                         }
@@ -348,6 +504,56 @@
                 }
             }
         },
+        "/api/admin/payments": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "支付流水列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号模糊搜索",
+                        "name": "order_no",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "success / closed / refunded",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页条数",
+                        "name": "size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/api/admin/providers": {
             "get": {
                 "security": [
@@ -372,7 +578,134 @@
                 }
             }
         },
+        "/api/admin/records/{id}/file": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "支持 Range；图片浏览器可直接预览",
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "后台下载服务记录文件",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "记录 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/redemptions": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "月卡核销列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "服务日期 2006-01-02",
+                        "name": "date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页条数",
+                        "name": "size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/api/admin/refunds": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "含发起人 operator_id 与退款状态，用于跟踪退款结果",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "退款单列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号模糊搜索",
+                        "name": "order_no",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "pending / success / failed",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页条数",
+                        "name": "size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
@@ -544,6 +877,211 @@
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.SetSlotsReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/slots/copy": {
+            "post": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "覆盖目标日期已有时段 total；源日期无配置时报错",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "复制某天时段配置到多个日期",
+                "parameters": [
+                    {
+                        "description": "源日期与目标日期列表",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.CopySlotsReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data.applied 为写入的时段条数",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/stats": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "运营看板",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/users": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "用户/服务方列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "user / provider",
+                        "name": "role",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "昵称/openid/手机号模糊搜索",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页条数",
+                        "name": "size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/users/{id}/role": {
+            "patch": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "升为 provider 后可被派单；降回 user 后不再出现在派单下拉",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "切换用户角色",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "用户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "目标角色",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.SetUserRoleReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/users/{id}/status": {
+            "patch": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "封禁后小程序端无法登录",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "封禁或解封用户",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "用户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "1 正常 / 0 封禁",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.SetUserStatusReq"
                         }
                     }
                 ],
@@ -1649,6 +2187,30 @@
                 }
             }
         },
+        "github_com_alinger_community-handyman_server_internal_dto.CopySlotsReq": {
+            "type": "object",
+            "required": [
+                "source_date",
+                "target_dates"
+            ],
+            "properties": {
+                "source_date": {
+                    "type": "string",
+                    "example": "2026-11-20"
+                },
+                "target_dates": {
+                    "type": "array",
+                    "maxItems": 62,
+                    "minItems": 1,
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "2026-11-21"
+                    ]
+                }
+            }
+        },
         "github_com_alinger_community-handyman_server_internal_dto.CreateAddressReq": {
             "type": "object",
             "required": [
@@ -1934,6 +2496,35 @@
                 }
             }
         },
+        "github_com_alinger_community-handyman_server_internal_dto.SetUserRoleReq": {
+            "type": "object",
+            "required": [
+                "role"
+            ],
+            "properties": {
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "provider"
+                    ],
+                    "example": "provider"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.SetUserStatusReq": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ],
+                    "example": 0
+                }
+            }
+        },
         "github_com_alinger_community-handyman_server_internal_dto.UpdateAddressReq": {
             "type": "object",
             "required": [
@@ -1964,6 +2555,44 @@
                 "lane": {
                     "type": "string",
                     "maxLength": 64
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.UpdateAreaReq": {
+            "type": "object",
+            "required": [
+                "community",
+                "lane"
+            ],
+            "properties": {
+                "community": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "example": "东方冠郡二期"
+                },
+                "house_from": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "example": 1
+                },
+                "house_parity": {
+                    "type": "string",
+                    "enum": [
+                        "all",
+                        "odd",
+                        "even"
+                    ],
+                    "example": "all"
+                },
+                "house_to": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "example": 89
+                },
+                "lane": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "example": "众安路779弄"
                 }
             }
         },

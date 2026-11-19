@@ -2,7 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  listAreas, createArea, setAreaStatus,
+  listAreas, createArea, setAreaStatus, updateArea,
   type ServiceArea, type CreateAreaPayload, ApiError,
 } from '@/api'
 
@@ -10,6 +10,7 @@ const loading = ref(false)
 const rows = ref<ServiceArea[]>([])
 const visible = ref(false)
 const saving = ref(false)
+const editingId = ref<number | null>(null)
 const form = reactive<CreateAreaPayload>({
   community: '', lane: '', house_from: 0, house_to: 0, house_parity: 'all',
 })
@@ -29,7 +30,18 @@ async function load() {
 onMounted(load)
 
 function openAdd() {
+  editingId.value = null
   Object.assign(form, { community: '', lane: '', house_from: 0, house_to: 0, house_parity: 'all' })
+  visible.value = true
+}
+
+function openEdit(row: ServiceArea) {
+  editingId.value = row.id
+  Object.assign(form, {
+    community: row.community, lane: row.lane,
+    house_from: row.house_from, house_to: row.house_to,
+    house_parity: (row.house_parity as CreateAreaPayload['house_parity']) || 'all',
+  })
   visible.value = true
 }
 
@@ -40,8 +52,14 @@ async function save() {
   }
   saving.value = true
   try {
-    await createArea({ ...form, community: form.community.trim(), lane: form.lane.trim() })
-    ElMessage.success('已新增服务范围')
+    const payload = { ...form, community: form.community.trim(), lane: form.lane.trim() }
+    if (editingId.value) {
+      await updateArea(editingId.value, payload)
+      ElMessage.success('已保存修改')
+    } else {
+      await createArea(payload)
+      ElMessage.success('已新增服务范围')
+    }
     visible.value = false
     load()
   } catch (e) {
@@ -96,8 +114,9 @@ async function toggle(row: ServiceArea) {
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="100" fixed="right">
+      <el-table-column label="操作" width="140" fixed="right">
         <template #default="{ row }">
+          <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
           <el-button link :type="row.status === 1 ? 'danger' : 'primary'" @click="toggle(row)">
             {{ row.status === 1 ? '停用' : '启用' }}
           </el-button>
@@ -105,7 +124,7 @@ async function toggle(row: ServiceArea) {
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="visible" title="新增服务范围" width="500px">
+    <el-dialog v-model="visible" :title="editingId ? '编辑服务范围' : '新增服务范围'" width="500px">
       <el-form label-width="90px">
         <el-form-item label="小区"><el-input v-model="form.community" placeholder="如：东方冠郡二期" /></el-form-item>
         <el-form-item label="路弄"><el-input v-model="form.lane" placeholder="如：众安路779弄" /></el-form-item>

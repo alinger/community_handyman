@@ -3,7 +3,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listOrders, listProviders, assignOrder, refund, redeem, quote,
-  type Order, type ProviderOption, type OrderQuery, ApiError,
+  listOrderEvents, listOrderRecords, fetchRecordBlobUrl, exportOrdersUrl,
+  type Order, type ProviderOption, type OrderQuery, type AdminEvent, type AdminRecord, ApiError,
 } from '@/api'
 import { useAuthStore } from '@/store/auth'
 
@@ -78,9 +79,47 @@ onMounted(() => {
 // ---- 详情抽屉 ----
 const detailVisible = ref(false)
 const detail = ref<Order | null>(null)
-function openDetail(o: Order) {
+const events = ref<AdminEvent[]>([])
+const records = ref<AdminRecord[]>([])
+const recordUrls = new Map<number, string>() // id -> blob url
+
+const NODE_LABELS: Record<string, string> = {
+  created: '创建订单', paid: '支付成功', pending_accept: '待接单', assigned: '已派单',
+  accepted: '服务方接单', on_the_way: '前往中', in_service: '服务开始',
+  pending_confirm: '服务完成待确认', completed: '订单完成', canceled: '订单取消', rejected: '已拒单',
+}
+
+async function openDetail(o: Order) {
   detail.value = o
   detailVisible.value = true
+  events.value = []
+  records.value = []
+  recordUrls.forEach((u) => URL.revokeObjectURL(u))
+  recordUrls.clear()
+  listOrderEvents(o.order_no).then((v) => { events.value = v }).catch(() => {})
+  listOrderRecords(o.order_no).then(async (v) => {
+    records.value = v
+    for (const r of v) {
+      try {
+        recordUrls.set(r.id, await fetchRecordBlobUrl(r))
+      } catch {
+        // 预览失败不阻塞
+      }
+    }
+  }).catch(() => {})
+}
+
+const MEDIA_LABELS: Record<string, string> = {
+  photo: '照片', video: '视频', advice: '医嘱', document: '文书',
+}
+const recordBlobUrl = (r: AdminRecord) => recordUrls.get(r.id) || ''
+function previewRecord(r: AdminRecord) {
+  const url = recordBlobUrl(r)
+  if (!url) {
+    ElMessage.warning('文件加载中或加载失败，请稍后再试')
+    return
+  }
+  window.open(url, '_blank')
 }
 
 // ---- 派单 ----
@@ -189,6 +228,33 @@ async function doQuote() {
 }
 
 const title = computed(() => `${auth.username || '运营'} · 订单管理`)
+
+// ---- CSV 导出（带当前筛选条件）----
+const exporting = ref(false)
+async function onExport() {
+  exporting.value = true
+  try {
+    // Bearer 鉴权不能直接 window.open，走 fetch + blob
+    const token = auth.token
+    const res = await fetch(exportOrdersUrl({
+      status: query.status || undefined,
+      service_type: query.service_type || undefined,
+      keyword: query.keyword || undefined,
+    }), { headers: { Authorization: `Bearer ${token}` } })
+    if (!res.ok) throw new Error('导出失败')
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `orders_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  } catch {
+    ElMessage.error('导出失败，请重试')
+  } finally {
+    exporting.value = false
+  }
+}
 </script>
 
 <template>
@@ -211,6 +277,7 @@ const title = computed(() => `${auth.username || '运营'} · 订单管理`)
         <el-form-item>
           <el-button type="primary" @click="load">查询</el-button>
           <el-button @click="reset">重置</el-button>
+          <el-button :loading="exporting" @click="onExport">导出 CSV</el-button>
         </el-form-item>
       </el-form>
     </div>
@@ -299,6 +366,47 @@ const title = computed(() => `${auth.username || '运营'} · 订单管理`)
             {{ n.label }}<span v-if="!n.reached" class="muted">（未到达）</span>
           </el-timeline-item>
         </el-timeline>
+
+        <h4 class="sec">操作轨迹</h4>
+        <el-timeline v-if="events.length">
+          <el-timeline-item
+            v-for="e in events"
+            :key="e.id"
+            :timestamp="e.created_at?.slice(0, 19).replace('T', ' ')"
+            color="#67c23a"
+          >
+            {{ NODE_LABELS[e.node] || e.node }}
+            <el-tag size="small" type="info" class="op-tag">{{ e.operator }}</el-tag>
+            <span v-if="e.remark" class="muted">（{{ e.remark }}）</span>
+          </el-timeline-item>
+        </el-timeline>
+        <p v-else class="muted">暂无操作记录</p>
+
+        <h4 class="sec">服务记录</h4>
+        <div v-if="records.length" class="records">
+          <div
+            v-for="r in records"
+            :key="r.id"
+            class="record-card"
+            @click="previewRecord(r)"
+          >
+            <img
+              v-if="r.media_type === 'photo' && recordBlobUrl(r)"
+              :src="recordBlobUrl(r)"
+              class="record-thumb"
+            />
+            <div v-else class="record-thumb record-doc">{{ MEDIA_LABELS[r.media_type] || r.media_type }}</div>
+            <div class="record-meta">
+              <div>{{ MEDIA_LABELS[r.media_type] || r.media_type }} · #{{ r.id }}</div>
+              <div class="muted">
+                {{ r.uploader_role === 'provider' ? '服务方' : '住户' }} ·
+                {{ (r.size / 1024).toFixed(0) }}KB
+                <template v-if="r.media_type === 'video'"> · {{ r.duration_sec }}s</template>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p v-else class="muted">服务方尚未上传记录</p>
       </template>
     </el-drawer>
 
@@ -372,4 +480,17 @@ const title = computed(() => `${auth.username || '运营'} · 订单管理`)
 .muted { color: #9aa3ad; }
 .dialog-hint { margin: 0 0 16px; color: #6b7280; font-size: 13px; }
 .form-hint { color: #9aa3ad; font-size: 12px; line-height: 1.4; }
+.op-tag { margin-left: 6px; }
+.records { display: flex; flex-wrap: wrap; gap: 10px; }
+.record-card {
+  width: 130px; cursor: pointer; border: 1px solid #eef0f2; border-radius: 8px;
+  overflow: hidden; background: #fff;
+}
+.record-card:hover { border-color: #0f7f78; }
+.record-thumb { width: 130px; height: 90px; object-fit: cover; display: block; }
+.record-doc {
+  display: flex; align-items: center; justify-content: center;
+  background: #f3f6f6; color: #0c4a47; font-size: 13px; font-weight: 600;
+}
+.record-meta { padding: 6px 8px; font-size: 12px; color: #374151; }
 </style>

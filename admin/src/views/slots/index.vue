@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  listSlots, setSlots,
+  listSlots, setSlots, copySlots,
   type SlotInventory, type SetSlotItem, ApiError,
 } from '@/api'
 
@@ -85,6 +85,31 @@ async function save() {
 async function fillAll(v: number) {
   serviceTypes.forEach((t) => slotCodes.forEach((code) => { matrix[t.value][code] = v }))
 }
+
+// ---- 模板复制：把当前日期的配置复制到一批未来日期 ----
+const copyVisible = ref(false)
+const copyDates = ref<string[]>([])
+const copying = ref(false)
+function openCopy() {
+  copyDates.value = []
+  copyVisible.value = true
+}
+async function doCopy() {
+  if (!copyDates.value.length) {
+    ElMessage.warning('请选择目标日期')
+    return
+  }
+  copying.value = true
+  try {
+    const res = await copySlots(date.value, copyDates.value)
+    ElMessage.success(`已复制到 ${copyDates.value.length} 天，共写入 ${res.applied} 个时段`)
+    copyVisible.value = false
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    copying.value = false
+  }
+}
 </script>
 
 <template>
@@ -96,6 +121,7 @@ async function fillAll(v: number) {
         <el-button @click="load">刷新</el-button>
       </div>
       <div class="right">
+        <el-button size="small" @click="openCopy">复制到未来日期</el-button>
         <el-button size="small" @click="fillAll(0)">全部置 0</el-button>
         <el-button size="small" @click="fillAll(5)">全部置 5</el-button>
         <el-button type="primary" :loading="saving" :disabled="changedCount === 0" @click="save">
@@ -125,6 +151,21 @@ async function fillAll(v: number) {
         </template>
       </el-table-column>
     </el-table>
+
+    <!-- 模板复制 -->
+    <el-dialog v-model="copyVisible" title="复制时段配置" width="480px">
+      <p class="dialog-hint">
+        把 <b>{{ date }}</b> 的全部时段配置复制到目标日期；目标日期已有的配置会被覆盖（已用计数不变）。
+      </p>
+      <el-date-picker
+        v-model="copyDates" type="dates" value-format="YYYY-MM-DD"
+        placeholder="选择一个或多个目标日期" style="width: 100%"
+      />
+      <template #footer>
+        <el-button @click="copyVisible = false">取消</el-button>
+        <el-button type="primary" :loading="copying" @click="doCopy">确认复制</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -134,4 +175,5 @@ async function fillAll(v: number) {
 .title { font-size: 16px; font-weight: 600; margin-right: 8px; }
 .note { color: #6b7280; font-size: 13px; margin-bottom: 12px; }
 .used { color: #9aa3ad; font-size: 11px; margin-top: 4px; }
+.dialog-hint { margin: 0 0 16px; color: #6b7280; font-size: 13px; line-height: 1.6; }
 </style>

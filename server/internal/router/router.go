@@ -173,6 +173,27 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 			authedAdmin.POST("/orders/:orderNo/assign", api.AdminAssign)
 			authedAdmin.POST("/orders/:orderNo/quote", api.AdminCreateQuote)
 			authedAdmin.POST("/orders/:orderNo/redeem", api.AdminRedeem)
+			authedAdmin.GET("/orders/:orderNo/events", api.AdminOrderEvents)
+			authedAdmin.GET("/orders/:orderNo/records", api.AdminOrderRecords)
+			authedAdmin.GET("/records/:id/file", api.AdminRecordFile)
+
+			// 看板与财务
+			authedAdmin.GET("/stats", api.AdminStats)
+			authedAdmin.GET("/payments", api.AdminListPayments)
+			authedAdmin.GET("/refunds", api.AdminListRefunds)
+
+			// 用户管理
+			authedAdmin.GET("/users", api.AdminListUsers)
+			authedAdmin.PATCH("/users/:id/role", api.AdminSetUserRole)
+			authedAdmin.PATCH("/users/:id/status", api.AdminSetUserStatus)
+
+			// 月卡核销与运营配置
+			authedAdmin.GET("/redemptions", api.AdminListRedemptions)
+			authedAdmin.PUT("/areas/:id", api.AdminUpdateArea)
+			authedAdmin.POST("/slots/copy", api.AdminCopySlots)
+
+			// 导出（静态路径放参数路由前注册，避免与 /orders/:orderNo 冲突）
+			authedAdmin.GET("/export/orders", api.AdminExportOrders)
 
 			// 退款是资金操作，要求超管
 			authedAdmin.POST("/refunds", middleware.RequireAdminRole(), api.AdminRefund)

@@ -105,14 +105,22 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("解析配置文件失败: %w", err)
 	}
 
-	// 占位符未注入环境变量时展开为空串，会覆盖默认值，这里回落一次，
-	// 避免本地开发因为忘记 export 而直接起不来。
+	// 占位符未注入环境变量时展开为空串。
+	// 只有 dev 允许回落到默认值；生产环境必须显式注入，
+	// 否则会带着 localhost 的 DSN 或默认密钥上线，出问题是静默的。
 	if strings.TrimSpace(cfg.Database.DSN) == "" {
-		cfg.Database.DSN = Default().Database.DSN
+		if cfg.App.Env == "dev" {
+			cfg.Database.DSN = Default().Database.DSN
+		} else {
+			return nil, fmt.Errorf("环境 %s 必须通过 MYSQL_DSN 注入数据库连接", cfg.App.Env)
+		}
 	}
-	// 同理：AUTH_SECRET 未注入时不能留空，否则签名密钥为空串
 	if strings.TrimSpace(cfg.Auth.Secret) == "" {
-		cfg.Auth.Secret = Default().Auth.Secret
+		if cfg.App.Env == "dev" {
+			cfg.Auth.Secret = Default().Auth.Secret
+		} else {
+			return nil, fmt.Errorf("环境 %s 必须通过 AUTH_SECRET 注入鉴权密钥", cfg.App.Env)
+		}
 	}
 	if cfg.Auth.TokenTTL <= 0 {
 		cfg.Auth.TokenTTL = Default().Auth.TokenTTL

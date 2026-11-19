@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	"gorm.io/gorm"
 
 	"github.com/alinger/community-handyman/server/internal/config"
@@ -46,6 +48,11 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 			RequestID: c.GetString(response.CtxRequestID),
 		})
 	})
+
+	// 接口文档：生产环境不暴露，避免把后台接口与错误码摊开给外部
+	if cfg.App.Env != "prod" {
+		r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+	}
 
 	deps := &Deps{}
 	if db == nil {

@@ -27,7 +27,7 @@ import (
 )
 
 func main() {
-	cfgPath := flag.String("config", "configs/config.yaml", "配置文件路径")
+	cfgPath := flag.String("config", "configs/config.dev.yaml", "配置文件路径")
 	dir := flag.String("dir", "migrations", "迁移文件目录")
 	cmd := flag.String("cmd", "up", "up | down | version | force | seed-admin")
 	steps := flag.Int("steps", 1, "down 时回滚的步数")

@@ -1,0 +1,1808 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "社区生活服务预约平台后端接口：地址范围校验、下单支付、履约、运营后台。\n用户端需 X-User-Id（接入微信登录后改为 Bearer JWT）；后台需 Bearer token。",
+        "title": "小区好帮手 API",
+        "contact": {},
+        "version": "1.1"
+    },
+    "basePath": "/",
+    "paths": {
+        "/api/admin/areas": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "服务范围列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "新增服务范围",
+                "parameters": [
+                    {
+                        "description": "范围规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.CreateAreaReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/areas/{id}/status": {
+            "patch": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "停用不影响已存在的订单",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "启停服务范围",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "范围 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "1 启用 / 0 停用",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.SetAreaStatusReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/login": {
+            "post": {
+                "description": "返回 Bearer token，默认 12 小时有效",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "后台登录",
+                "parameters": [
+                    {
+                        "description": "账号密码",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.AdminLoginReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "1002 账号或密码错误",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/orders": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "后台订单查询",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "服务类型",
+                        "name": "service_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "订单号模糊搜索",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页条数",
+                        "name": "size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/orders/{orderNo}/assign": {
+            "post": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "仅待接单的订单可派",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "派单或改派",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "服务方 ID",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.AssignOrderReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/orders/{orderNo}/quote": {
+            "post": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "写入报价单并把订单金额改为报价额；用户已确认后不可再改",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "陪诊报价",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "请求体：amount(int64,单位分)、duration_min(int)、note(string)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/orders/{orderNo}/redeem": {
+            "post": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "同一订单同一日期只能核销一次；首日下单时已占位，核销不再重复占",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "包月核销",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "请求体：date(string,2006-01-02)、remark(string)",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "2003 重复核销 / 2002 当日时段已满",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    },
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/refunds": {
+            "post": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "仅 admin 角色可调用。amount 为 0 表示全额退剩余部分；全额退款且未履约时订单自动关闭并释放时段",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "发起退款",
+                "parameters": [
+                    {
+                        "description": "退款参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.RefundReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    },
+                    "403": {
+                        "description": "1003 需要超管权限",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/skus": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "服务产品列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/skus/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "rules 做 JSON 部分合并，只传要改的键（如 holiday_dates），其余计价参数保持不变",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "改价与计价规则",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "SKU ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "价格与规则",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.UpdateSkuReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/slots": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "某天时段库存",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "日期，格式 2006-01-02",
+                        "name": "date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "total=0 表示该时段不开放",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "批量设置时段可接单量",
+                "parameters": [
+                    {
+                        "description": "日期与时段列表",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.SetSlotsReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/addresses": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "地址"
+                ],
+                "summary": "地址列表",
+                "responses": {
+                    "200": {
+                        "description": "data 为 dto.AddressResp 数组",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "保存前校验服务范围，超出范围返回 2001",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "地址"
+                ],
+                "summary": "新增地址",
+                "parameters": [
+                    {
+                        "description": "地址信息",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.CreateAddressReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "业务错误，见 code",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    },
+                    "201": {
+                        "description": "data 为 dto.AddressResp",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/addresses/check": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "地址"
+                ],
+                "summary": "地址范围预校验",
+                "parameters": [
+                    {
+                        "description": "小区与门牌",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.CheckAreaReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "2001 表示超出服务范围",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/dev/login": {
+            "post": {
+                "description": "按 openid 取或建用户，仅在 env=dev 时注册该路由",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "联调"
+                ],
+                "summary": "本地联调登录",
+                "parameters": [
+                    {
+                        "description": "openid 与角色",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.DevLoginReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data 含 user_id",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/orders": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "订单"
+                ],
+                "summary": "我的订单",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "pending / processing / completed，留空为全部",
+                        "name": "tab",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码，默认 1",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页条数，默认 10",
+                        "name": "size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data 为 dto.OrderResp 分页",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "预占时段并返回支付参数；陪诊订单金额为 0，等运营报价",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "订单"
+                ],
+                "summary": "创建订单",
+                "parameters": [
+                    {
+                        "description": "订单参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.CreateOrderReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "2001 超范围 / 2002 时段已满 / 3001 支付下单失败",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    },
+                    "201": {
+                        "description": "data 为 dto.CreateOrderResp",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/orders/preview": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "只计算不落库，用于提交前展示费用明细",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "订单"
+                ],
+                "summary": "费用试算",
+                "parameters": [
+                    {
+                        "description": "订单参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.CreateOrderReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data 为 dto.PreviewOrderResp",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/orders/{orderNo}": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "含费用明细、地址快照与节点时间轴",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "订单"
+                ],
+                "summary": "订单详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data 为 dto.OrderResp",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/orders/{orderNo}/cancel": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "距服务开始 2 小时外免费取消并退款；2 小时内返回 need_review；已开始不可取消",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "订单"
+                ],
+                "summary": "用户取消订单",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "取消原因",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.CancelOrderReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data 为 service.CancelResult",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/orders/{orderNo}/confirm": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "订单"
+                ],
+                "summary": "确认服务完成",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/orders/{orderNo}/monthly": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "含服务期、已用/剩余次数与核销明细",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "订单"
+                ],
+                "summary": "包月使用情况",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data 为 service.MonthlySummary",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/orders/{orderNo}/pay": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "订单"
+                ],
+                "summary": "重新发起支付",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "2004 已超时 / 2003 状态不允许",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/orders/{orderNo}/quote/reject": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "订单关闭并释放时段",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "订单"
+                ],
+                "summary": "拒绝陪诊报价",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "请求体：reason(string)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/orders/{orderNo}/records": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务记录"
+                ],
+                "summary": "服务记录列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "记录一经写入不可删除。图片 ≤10MB；视频 ≤80MB 且不超过 60 秒；文书 ≤20MB",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务记录"
+                ],
+                "summary": "上传服务记录",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "photo / video / advice / document",
+                        "name": "media_type",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "视频时长（秒），图片传 0",
+                        "name": "duration_sec",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "file",
+                        "description": "文件",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "1001 类型或大小不合规 / 1003 无权访问该订单",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    },
+                    "201": {
+                        "description": "data 为 service.ToRecordResp",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/orders/{orderNo}/records/{recordID}/file": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "带鉴权并校验订单归属；支持 Range，视频可拖动进度",
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "服务记录"
+                ],
+                "summary": "下载服务记录文件",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "记录 ID",
+                        "name": "recordID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "403": {
+                        "description": "无权访问",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/provider/orders": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方"
+                ],
+                "summary": "服务方名下订单",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "pending / processing / completed",
+                        "name": "tab",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页条数",
+                        "name": "size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/provider/orders/open": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "已支付且未派单的订单",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方"
+                ],
+                "summary": "可接单池",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "garbage / dogwalk / accompany",
+                        "name": "service_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页条数",
+                        "name": "size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/provider/orders/{orderNo}/accept": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "条件更新，先到先得；已被接单返回 2003",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方"
+                ],
+                "summary": "接单",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/provider/orders/{orderNo}/advance": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "目标状态必须满足状态机白名单，非法跳转返回 2003",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方"
+                ],
+                "summary": "推进节点",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "目标节点",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.AdvanceOrderReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/provider/orders/{orderNo}/reject": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方"
+                ],
+                "summary": "拒单",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "拒单原因",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.RejectOrderReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/callback/sandbox/pay": {
+            "post": {
+                "description": "仅 sandbox 渠道启用。报文：order_no、transaction_id、amount、sign（HMAC-SHA256）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "回调"
+                ],
+                "summary": "沙箱支付回调",
+                "responses": {
+                    "200": {
+                        "description": "1001 验签失败或金额不一致",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/healthz": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运维"
+                ],
+                "summary": "健康检查",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "github_com_alinger_community-handyman_server_internal_dto.AdminLoginReq": {
+            "type": "object",
+            "required": [
+                "password",
+                "username"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "example": "your-password"
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "example": "admin"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.AdvanceOrderReq": {
+            "type": "object",
+            "required": [
+                "node"
+            ],
+            "properties": {
+                "node": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "example": "in_service"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.AssignOrderReq": {
+            "type": "object",
+            "required": [
+                "provider_id"
+            ],
+            "properties": {
+                "provider_id": {
+                    "type": "integer",
+                    "example": 3
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.CancelOrderReq": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "example": "临时有事"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.CheckAreaReq": {
+            "type": "object",
+            "required": [
+                "community",
+                "house_no",
+                "lane"
+            ],
+            "properties": {
+                "community": {
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "house_no": {
+                    "type": "string",
+                    "maxLength": 32
+                },
+                "lane": {
+                    "type": "string",
+                    "maxLength": 64
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.CreateAddressReq": {
+            "type": "object",
+            "required": [
+                "community",
+                "house_no",
+                "lane"
+            ],
+            "properties": {
+                "community": {
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "contact_phone": {
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "extra": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "house_no": {
+                    "type": "string",
+                    "maxLength": 32
+                },
+                "lane": {
+                    "type": "string",
+                    "maxLength": 64
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.CreateAreaReq": {
+            "type": "object",
+            "required": [
+                "community",
+                "lane"
+            ],
+            "properties": {
+                "community": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "example": "东方冠郡二期"
+                },
+                "house_from": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "example": 1
+                },
+                "house_parity": {
+                    "type": "string",
+                    "enum": [
+                        "all",
+                        "odd",
+                        "even"
+                    ],
+                    "example": "all"
+                },
+                "house_to": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "example": 89
+                },
+                "lane": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "example": "众安路779弄"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.CreateOrderReq": {
+            "type": "object",
+            "required": [
+                "address_id",
+                "service_date",
+                "service_type",
+                "slot_code"
+            ],
+            "properties": {
+                "address_id": {
+                    "type": "integer"
+                },
+                "distance_km": {
+                    "type": "number",
+                    "maximum": 50,
+                    "minimum": 0
+                },
+                "duration_min": {
+                    "type": "integer",
+                    "maximum": 120,
+                    "minimum": 0
+                },
+                "feed_only": {
+                    "type": "boolean"
+                },
+                "garbage_type": {
+                    "type": "string",
+                    "enum": [
+                        "kitchen",
+                        "other",
+                        "recyclable"
+                    ]
+                },
+                "need_familiar": {
+                    "type": "boolean"
+                },
+                "pet_count": {
+                    "type": "integer",
+                    "maximum": 10,
+                    "minimum": 0
+                },
+                "plan": {
+                    "type": "string",
+                    "enum": [
+                        "single",
+                        "monthly"
+                    ]
+                },
+                "quantity": {
+                    "type": "integer",
+                    "maximum": 50,
+                    "minimum": 0
+                },
+                "remark": {
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "service_date": {
+                    "description": "2006-01-02",
+                    "type": "string"
+                },
+                "service_type": {
+                    "type": "string",
+                    "enum": [
+                        "garbage",
+                        "dogwalk",
+                        "accompany"
+                    ]
+                },
+                "slot_code": {
+                    "type": "string",
+                    "maxLength": 16
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.DevLoginReq": {
+            "type": "object",
+            "required": [
+                "openid"
+            ],
+            "properties": {
+                "nickname": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "example": "住户甲"
+                },
+                "openid": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "example": "resident_01"
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "provider",
+                        "admin"
+                    ],
+                    "example": "user"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.RefundReq": {
+            "type": "object",
+            "required": [
+                "order_no",
+                "reason"
+            ],
+            "properties": {
+                "amount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "example": 1000
+                },
+                "order_no": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "example": "CH202611191335571191"
+                },
+                "reason": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "example": "服务时长不足补偿"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.RejectOrderReq": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "example": "当天排期满"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.SetAreaStatusReq": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ],
+                    "example": 0
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.SetSlotItem": {
+            "type": "object",
+            "required": [
+                "service_type",
+                "slot_code"
+            ],
+            "properties": {
+                "service_type": {
+                    "type": "string",
+                    "enum": [
+                        "garbage",
+                        "dogwalk",
+                        "accompany"
+                    ],
+                    "example": "dogwalk"
+                },
+                "slot_code": {
+                    "type": "string",
+                    "maxLength": 16,
+                    "example": "18-20"
+                },
+                "total": {
+                    "type": "integer",
+                    "maximum": 200,
+                    "minimum": 0,
+                    "example": 5
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.SetSlotsReq": {
+            "type": "object",
+            "required": [
+                "date",
+                "items"
+            ],
+            "properties": {
+                "date": {
+                    "type": "string",
+                    "example": "2026-11-20"
+                },
+                "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.SetSlotItem"
+                    }
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.UpdateSkuReq": {
+            "type": "object",
+            "properties": {
+                "base_price": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "example": 4000
+                },
+                "rules": {
+                    "type": "object"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_pkg_response.Body": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "data": {},
+                "message": {
+                    "type": "string"
+                },
+                "request_id": {
+                    "type": "string"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "AdminToken": {
+            "description": "后台 token，格式：Bearer \u003ctoken\u003e",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        },
+        "UserID": {
+            "description": "本地联调的用户标识",
+            "type": "apiKey",
+            "name": "X-User-Id",
+            "in": "header"
+        }
+    }
+}

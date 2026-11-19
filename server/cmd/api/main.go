@@ -1,4 +1,18 @@
 // Command api 启动 HTTP 服务。
+//
+// @title           小区好帮手 API
+// @version         1.1
+// @description     社区生活服务预约平台后端接口：地址范围校验、下单支付、履约、运营后台。
+// @description     用户端需 X-User-Id（接入微信登录后改为 Bearer JWT）；后台需 Bearer token。
+// @BasePath        /
+// @securityDefinitions.apikey UserID
+// @in header
+// @name X-User-Id
+// @description 本地联调的用户标识
+// @securityDefinitions.apikey AdminToken
+// @in header
+// @name Authorization
+// @description 后台 token，格式：Bearer <token>
 package main
 
 import (
@@ -20,10 +34,13 @@ import (
 	"github.com/alinger/community-handyman/server/internal/service"
 	"github.com/alinger/community-handyman/server/internal/storage"
 	"github.com/alinger/community-handyman/server/pkg/logger"
+
+	// 生成的接口文档包，仅注册副作用
+	_ "github.com/alinger/community-handyman/server/docs"
 )
 
 func main() {
-	cfgPath := flag.String("config", "configs/config.yaml", "配置文件路径")
+	cfgPath := flag.String("config", "configs/config.dev.yaml", "配置文件路径")
 	flag.Parse()
 
 	cfg, err := config.Load(*cfgPath)

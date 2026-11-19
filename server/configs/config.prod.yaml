@@ -1,0 +1,55 @@
+# 生产配置：所有敏感项必须由环境变量注入，本文件只留占位与结构。
+# 启动前校验：env=prod 时缺 MYSQL_DSN 或 AUTH_SECRET 会直接退出。
+
+app:
+  name: community-handyman
+  env: prod
+
+server:
+  port: 8080
+  mode: release
+  read_timeout: 15s
+  write_timeout: 30s
+  shutdown_timeout: 15s
+  # 生产只放真实域名，CORS 不放通配
+  allow_origins:
+    - "${H5_ORIGIN}"
+
+database:
+  dsn: "${MYSQL_DSN}"
+  max_open_conns: 50
+  max_idle_conns: 20
+  conn_max_lifetime: 1h
+  # 生产关闭 SQL 明细，避免日志被业务数据淹没
+  log_sql: false
+
+redis:
+  addr: "${REDIS_ADDR}"
+  password: "${REDIS_PASSWORD}"
+  db: 0
+
+auth:
+  secret: "${AUTH_SECRET}"
+  token_ttl: 12h
+
+payment:
+  provider: "${PAYMENT_PROVIDER}"
+  sandbox_secret: "${PAYMENT_SANDBOX_SECRET}"
+
+wechat:
+  app_id: "${WECHAT_APP_ID}"
+  mch_id: "${WECHAT_MCH_ID}"
+  serial_no: "${WECHAT_SERIAL_NO}"
+  api_v3_key: "${WECHAT_API_V3_KEY}"
+  private_key_path: "${WECHAT_PRIVATE_KEY_PATH}"
+  notify_url: "${WECHAT_NOTIFY_URL}"
+  refund_notify_url: "${WECHAT_REFUND_NOTIFY_URL}"
+
+storage:
+  provider: "${STORAGE_PROVIDER}"
+  local_dir: "${STORAGE_LOCAL_DIR}"
+  endpoint: "${STORAGE_ENDPOINT}"
+  region: "${STORAGE_REGION}"
+  bucket: "${STORAGE_BUCKET}"
+  access_key: "${STORAGE_ACCESS_KEY}"
+  secret_key: "${STORAGE_SECRET_KEY}"

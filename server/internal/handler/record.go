@@ -17,6 +17,19 @@ const maxUploadBytes = 80<<20 + 1<<20
 
 // UploadRecord 上传服务记录（multipart）。
 // 记录一经写入不可删除，服务端不暴露删除接口。
+// @Summary      上传服务记录
+// @Description  记录一经写入不可删除。图片 ≤10MB；视频 ≤80MB 且不超过 60 秒；文书 ≤20MB
+// @Tags         服务记录
+// @Accept       multipart/form-data
+// @Produce      json
+// @Param        orderNo       path      string  true   "订单号"
+// @Param        media_type    formData  string  true   "photo / video / advice / document"
+// @Param        duration_sec  formData  int     false  "视频时长（秒），图片传 0"
+// @Param        file          formData  file    true   "文件"
+// @Success      201  {object}  response.Body  "data 为 service.ToRecordResp"
+// @Failure      200  {object}  response.Body  "1001 类型或大小不合规 / 1003 无权访问该订单"
+// @Security     UserID
+// @Router       /api/v1/orders/{orderNo}/records [post]
 func (a *API) UploadRecord(c *gin.Context) {
 	orderNo := c.Param("orderNo")
 
@@ -54,6 +67,13 @@ func (a *API) UploadRecord(c *gin.Context) {
 }
 
 // ListRecords 查询订单服务记录。
+// @Summary      服务记录列表
+// @Tags         服务记录
+// @Produce      json
+// @Param        orderNo  path  string  true  "订单号"
+// @Success      200  {object}  response.Body
+// @Security     UserID
+// @Router       /api/v1/orders/{orderNo}/records [get]
 func (a *API) ListRecords(c *gin.Context) {
 	orderNo := c.Param("orderNo")
 	list, err := a.Record.List(c.Request.Context(), middleware.CurrentUserID(c), orderNo)
@@ -66,6 +86,16 @@ func (a *API) ListRecords(c *gin.Context) {
 
 // DownloadRecord 流式下载记录文件。
 // 不暴露静态目录：文件含病历与门禁照片，必须带鉴权并校验订单归属。
+// @Summary      下载服务记录文件
+// @Description  带鉴权并校验订单归属；支持 Range，视频可拖动进度
+// @Tags         服务记录
+// @Produce      application/octet-stream
+// @Param        orderNo   path  string  true  "订单号"
+// @Param        recordID  path  int     true  "记录 ID"
+// @Success      200  {file}  binary
+// @Failure      403  {object}  response.Body  "无权访问"
+// @Security     UserID
+// @Router       /api/v1/orders/{orderNo}/records/{recordID}/file [get]
 func (a *API) DownloadRecord(c *gin.Context) {
 	orderNo := c.Param("orderNo")
 	recordID := uint64(atoiDefault(c.Param("recordID"), 0))

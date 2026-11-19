@@ -1,0 +1,1170 @@
+basePath: /
+definitions:
+  github_com_alinger_community-handyman_server_internal_dto.AdminLoginReq:
+    properties:
+      password:
+        example: your-password
+        maxLength: 64
+        type: string
+      username:
+        example: admin
+        maxLength: 32
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  github_com_alinger_community-handyman_server_internal_dto.AdvanceOrderReq:
+    properties:
+      node:
+        example: in_service
+        maxLength: 32
+        type: string
+    required:
+    - node
+    type: object
+  github_com_alinger_community-handyman_server_internal_dto.AssignOrderReq:
+    properties:
+      provider_id:
+        example: 3
+        type: integer
+    required:
+    - provider_id
+    type: object
+  github_com_alinger_community-handyman_server_internal_dto.CancelOrderReq:
+    properties:
+      reason:
+        example: 临时有事
+        maxLength: 200
+        type: string
+    type: object
+  github_com_alinger_community-handyman_server_internal_dto.CheckAreaReq:
+    properties:
+      community:
+        maxLength: 64
+        type: string
+      house_no:
+        maxLength: 32
+        type: string
+      lane:
+        maxLength: 64
+        type: string
+    required:
+    - community
+    - house_no
+    - lane
+    type: object
+  github_com_alinger_community-handyman_server_internal_dto.CreateAddressReq:
+    properties:
+      community:
+        maxLength: 64
+        type: string
+      contact_phone:
+        maxLength: 20
+        type: string
+      extra:
+        maxLength: 255
+        type: string
+      house_no:
+        maxLength: 32
+        type: string
+      lane:
+        maxLength: 64
+        type: string
+    required:
+    - community
+    - house_no
+    - lane
+    type: object
+  github_com_alinger_community-handyman_server_internal_dto.CreateAreaReq:
+    properties:
+      community:
+        example: 东方冠郡二期
+        maxLength: 64
+        type: string
+      house_from:
+        example: 1
+        minimum: 0
+        type: integer
+      house_parity:
+        enum:
+        - all
+        - odd
+        - even
+        example: all
+        type: string
+      house_to:
+        example: 89
+        minimum: 0
+        type: integer
+      lane:
+        example: 众安路779弄
+        maxLength: 128
+        type: string
+    required:
+    - community
+    - lane
+    type: object
+  github_com_alinger_community-handyman_server_internal_dto.CreateOrderReq:
+    properties:
+      address_id:
+        type: integer
+      distance_km:
+        maximum: 50
+        minimum: 0
+        type: number
+      duration_min:
+        maximum: 120
+        minimum: 0
+        type: integer
+      feed_only:
+        type: boolean
+      garbage_type:
+        enum:
+        - kitchen
+        - other
+        - recyclable
+        type: string
+      need_familiar:
+        type: boolean
+      pet_count:
+        maximum: 10
+        minimum: 0
+        type: integer
+      plan:
+        enum:
+        - single
+        - monthly
+        type: string
+      quantity:
+        maximum: 50
+        minimum: 0
+        type: integer
+      remark:
+        maxLength: 200
+        type: string
+      service_date:
+        description: "2006-01-02"
+        type: string
+      service_type:
+        enum:
+        - garbage
+        - dogwalk
+        - accompany
+        type: string
+      slot_code:
+        maxLength: 16
+        type: string
+    required:
+    - address_id
+    - service_date
+    - service_type
+    - slot_code
+    type: object
+  github_com_alinger_community-handyman_server_internal_dto.DevLoginReq:
+    properties:
+      nickname:
+        example: 住户甲
+        maxLength: 64
+        type: string
+      openid:
+        example: resident_01
+        maxLength: 64
+        type: string
+      role:
+        enum:
+        - user
+        - provider
+        - admin
+        example: user
+        type: string
+    required:
+    - openid
+    type: object
+  github_com_alinger_community-handyman_server_internal_dto.RefundReq:
+    properties:
+      amount:
+        example: 1000
+        minimum: 0
+        type: integer
+      order_no:
+        example: CH202611191335571191
+        maxLength: 32
+        type: string
+      reason:
+        example: 服务时长不足补偿
+        maxLength: 200
+        type: string
+    required:
+    - order_no
+    - reason
+    type: object
+  github_com_alinger_community-handyman_server_internal_dto.RejectOrderReq:
+    properties:
+      reason:
+        example: 当天排期满
+        maxLength: 200
+        type: string
+    type: object
+  github_com_alinger_community-handyman_server_internal_dto.SetAreaStatusReq:
+    properties:
+      status:
+        enum:
+        - 0
+        - 1
+        example: 0
+        type: integer
+    type: object
+  github_com_alinger_community-handyman_server_internal_dto.SetSlotItem:
+    properties:
+      service_type:
+        enum:
+        - garbage
+        - dogwalk
+        - accompany
+        example: dogwalk
+        type: string
+      slot_code:
+        example: 18-20
+        maxLength: 16
+        type: string
+      total:
+        example: 5
+        maximum: 200
+        minimum: 0
+        type: integer
+    required:
+    - service_type
+    - slot_code
+    type: object
+  github_com_alinger_community-handyman_server_internal_dto.SetSlotsReq:
+    properties:
+      date:
+        example: "2026-11-20"
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.SetSlotItem'
+        minItems: 1
+        type: array
+    required:
+    - date
+    - items
+    type: object
+  github_com_alinger_community-handyman_server_internal_dto.UpdateSkuReq:
+    properties:
+      base_price:
+        example: 4000
+        minimum: 0
+        type: integer
+      rules:
+        type: object
+    type: object
+  github_com_alinger_community-handyman_server_pkg_response.Body:
+    properties:
+      code:
+        type: integer
+      data: {}
+      message:
+        type: string
+      request_id:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: |-
+    社区生活服务预约平台后端接口：地址范围校验、下单支付、履约、运营后台。
+    用户端需 X-User-Id（接入微信登录后改为 Bearer JWT）；后台需 Bearer token。
+  title: 小区好帮手 API
+  version: "1.1"
+paths:
+  /api/admin/areas:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 服务范围列表
+      tags:
+      - 运营后台
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 范围规则
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.CreateAreaReq'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 新增服务范围
+      tags:
+      - 运营后台
+  /api/admin/areas/{id}/status:
+    patch:
+      consumes:
+      - application/json
+      description: 停用不影响已存在的订单
+      parameters:
+      - description: 范围 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 1 启用 / 0 停用
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.SetAreaStatusReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 启停服务范围
+      tags:
+      - 运营后台
+  /api/admin/login:
+    post:
+      consumes:
+      - application/json
+      description: 返回 Bearer token，默认 12 小时有效
+      parameters:
+      - description: 账号密码
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.AdminLoginReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 1002 账号或密码错误
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      summary: 后台登录
+      tags:
+      - 运营后台
+  /api/admin/orders:
+    get:
+      parameters:
+      - description: 订单状态
+        in: query
+        name: status
+        type: string
+      - description: 服务类型
+        in: query
+        name: service_type
+        type: string
+      - description: 订单号模糊搜索
+        in: query
+        name: keyword
+        type: string
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页条数
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 后台订单查询
+      tags:
+      - 运营后台
+  /api/admin/orders/{orderNo}/assign:
+    post:
+      consumes:
+      - application/json
+      description: 仅待接单的订单可派
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      - description: 服务方 ID
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.AssignOrderReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 派单或改派
+      tags:
+      - 运营后台
+  /api/admin/orders/{orderNo}/quote:
+    post:
+      consumes:
+      - application/json
+      description: 写入报价单并把订单金额改为报价额；用户已确认后不可再改
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      - description: 请求体：amount(int64,单位分)、duration_min(int)、note(string)
+        in: body
+        name: body
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 陪诊报价
+      tags:
+      - 运营后台
+  /api/admin/orders/{orderNo}/redeem:
+    post:
+      consumes:
+      - application/json
+      description: 同一订单同一日期只能核销一次；首日下单时已占位，核销不再重复占
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      - description: 请求体：date(string,2006-01-02)、remark(string)
+        in: body
+        name: body
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 2003 重复核销 / 2002 当日时段已满
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 包月核销
+      tags:
+      - 运营后台
+  /api/admin/refunds:
+    post:
+      consumes:
+      - application/json
+      description: 仅 admin 角色可调用。amount 为 0 表示全额退剩余部分；全额退款且未履约时订单自动关闭并释放时段
+      parameters:
+      - description: 退款参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.RefundReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+        "403":
+          description: 1003 需要超管权限
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 发起退款
+      tags:
+      - 运营后台
+  /api/admin/skus:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 服务产品列表
+      tags:
+      - 运营后台
+  /api/admin/skus/{id}:
+    put:
+      consumes:
+      - application/json
+      description: rules 做 JSON 部分合并，只传要改的键（如 holiday_dates），其余计价参数保持不变
+      parameters:
+      - description: SKU ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 价格与规则
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.UpdateSkuReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 改价与计价规则
+      tags:
+      - 运营后台
+  /api/admin/slots:
+    get:
+      parameters:
+      - description: 日期，格式 2006-01-02
+        in: query
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 某天时段库存
+      tags:
+      - 运营后台
+    put:
+      consumes:
+      - application/json
+      description: total=0 表示该时段不开放
+      parameters:
+      - description: 日期与时段列表
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.SetSlotsReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 批量设置时段可接单量
+      tags:
+      - 运营后台
+  /api/v1/addresses:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data 为 dto.AddressResp 数组
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 地址列表
+      tags:
+      - 地址
+    post:
+      consumes:
+      - application/json
+      description: 保存前校验服务范围，超出范围返回 2001
+      parameters:
+      - description: 地址信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.CreateAddressReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 业务错误，见 code
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+        "201":
+          description: data 为 dto.AddressResp
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 新增地址
+      tags:
+      - 地址
+  /api/v1/addresses/check:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 小区与门牌
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.CheckAreaReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 2001 表示超出服务范围
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 地址范围预校验
+      tags:
+      - 地址
+  /api/v1/dev/login:
+    post:
+      consumes:
+      - application/json
+      description: 按 openid 取或建用户，仅在 env=dev 时注册该路由
+      parameters:
+      - description: openid 与角色
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.DevLoginReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data 含 user_id
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      summary: 本地联调登录
+      tags:
+      - 联调
+  /api/v1/orders:
+    get:
+      parameters:
+      - description: pending / processing / completed，留空为全部
+        in: query
+        name: tab
+        type: string
+      - description: 页码，默认 1
+        in: query
+        name: page
+        type: integer
+      - description: 每页条数，默认 10
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data 为 dto.OrderResp 分页
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 我的订单
+      tags:
+      - 订单
+    post:
+      consumes:
+      - application/json
+      description: 预占时段并返回支付参数；陪诊订单金额为 0，等运营报价
+      parameters:
+      - description: 订单参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.CreateOrderReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 2001 超范围 / 2002 时段已满 / 3001 支付下单失败
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+        "201":
+          description: data 为 dto.CreateOrderResp
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 创建订单
+      tags:
+      - 订单
+  /api/v1/orders/{orderNo}:
+    get:
+      description: 含费用明细、地址快照与节点时间轴
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data 为 dto.OrderResp
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 订单详情
+      tags:
+      - 订单
+  /api/v1/orders/{orderNo}/cancel:
+    post:
+      consumes:
+      - application/json
+      description: 距服务开始 2 小时外免费取消并退款；2 小时内返回 need_review；已开始不可取消
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      - description: 取消原因
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.CancelOrderReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data 为 service.CancelResult
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 用户取消订单
+      tags:
+      - 订单
+  /api/v1/orders/{orderNo}/confirm:
+    post:
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 确认服务完成
+      tags:
+      - 订单
+  /api/v1/orders/{orderNo}/monthly:
+    get:
+      description: 含服务期、已用/剩余次数与核销明细
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data 为 service.MonthlySummary
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 包月使用情况
+      tags:
+      - 订单
+  /api/v1/orders/{orderNo}/pay:
+    post:
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 2004 已超时 / 2003 状态不允许
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 重新发起支付
+      tags:
+      - 订单
+  /api/v1/orders/{orderNo}/quote/reject:
+    post:
+      consumes:
+      - application/json
+      description: 订单关闭并释放时段
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      - description: 请求体：reason(string)
+        in: body
+        name: body
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 拒绝陪诊报价
+      tags:
+      - 订单
+  /api/v1/orders/{orderNo}/records:
+    get:
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 服务记录列表
+      tags:
+      - 服务记录
+    post:
+      consumes:
+      - multipart/form-data
+      description: 记录一经写入不可删除。图片 ≤10MB；视频 ≤80MB 且不超过 60 秒；文书 ≤20MB
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      - description: photo / video / advice / document
+        in: formData
+        name: media_type
+        required: true
+        type: string
+      - description: 视频时长（秒），图片传 0
+        in: formData
+        name: duration_sec
+        type: integer
+      - description: 文件
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 1001 类型或大小不合规 / 1003 无权访问该订单
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+        "201":
+          description: data 为 service.ToRecordResp
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 上传服务记录
+      tags:
+      - 服务记录
+  /api/v1/orders/{orderNo}/records/{recordID}/file:
+    get:
+      description: 带鉴权并校验订单归属；支持 Range，视频可拖动进度
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      - description: 记录 ID
+        in: path
+        name: recordID
+        required: true
+        type: integer
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "403":
+          description: 无权访问
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 下载服务记录文件
+      tags:
+      - 服务记录
+  /api/v1/orders/preview:
+    post:
+      consumes:
+      - application/json
+      description: 只计算不落库，用于提交前展示费用明细
+      parameters:
+      - description: 订单参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.CreateOrderReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data 为 dto.PreviewOrderResp
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 费用试算
+      tags:
+      - 订单
+  /api/v1/provider/orders:
+    get:
+      parameters:
+      - description: pending / processing / completed
+        in: query
+        name: tab
+        type: string
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页条数
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 服务方名下订单
+      tags:
+      - 服务方
+  /api/v1/provider/orders/{orderNo}/accept:
+    post:
+      description: 条件更新，先到先得；已被接单返回 2003
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 接单
+      tags:
+      - 服务方
+  /api/v1/provider/orders/{orderNo}/advance:
+    post:
+      consumes:
+      - application/json
+      description: 目标状态必须满足状态机白名单，非法跳转返回 2003
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      - description: 目标节点
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.AdvanceOrderReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 推进节点
+      tags:
+      - 服务方
+  /api/v1/provider/orders/{orderNo}/reject:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 订单号
+        in: path
+        name: orderNo
+        required: true
+        type: string
+      - description: 拒单原因
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.RejectOrderReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 拒单
+      tags:
+      - 服务方
+  /api/v1/provider/orders/open:
+    get:
+      description: 已支付且未派单的订单
+      parameters:
+      - description: garbage / dogwalk / accompany
+        in: query
+        name: service_type
+        type: string
+      - description: 页码
+        in: query
+        name: page
+        type: integer
+      - description: 每页条数
+        in: query
+        name: size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 可接单池
+      tags:
+      - 服务方
+  /callback/sandbox/pay:
+    post:
+      consumes:
+      - application/json
+      description: 仅 sandbox 渠道启用。报文：order_no、transaction_id、amount、sign（HMAC-SHA256）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 1001 验签失败或金额不一致
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      summary: 沙箱支付回调
+      tags:
+      - 回调
+  /healthz:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      summary: 健康检查
+      tags:
+      - 运维
+securityDefinitions:
+  AdminToken:
+    description: 后台 token，格式：Bearer <token>
+    in: header
+    name: Authorization
+    type: apiKey
+  UserID:
+    description: 本地联调的用户标识
+    in: header
+    name: X-User-Id
+    type: apiKey
+swagger: "2.0"

@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/alinger/community-handyman/server/internal/auth"
+	"github.com/alinger/community-handyman/server/internal/dto"
 	"github.com/alinger/community-handyman/server/internal/errs"
 	"github.com/alinger/community-handyman/server/internal/model"
 	"github.com/alinger/community-handyman/server/internal/repository"
@@ -103,15 +104,8 @@ func (s *AdminService) ListSlots(ctx context.Context, dateStr string) ([]model.S
 	return list, nil
 }
 
-// SlotTotalInput 单条时段设置。
-type SlotTotalInput struct {
-	SlotCode    string `json:"slot_code" binding:"required,max=16"`
-	ServiceType string `json:"service_type" binding:"required,oneof=garbage dogwalk accompany"`
-	Total       int    `json:"total" binding:"min=0,max=200"`
-}
-
 // SetSlotTotals 批量设置某天可接单量。total=0 表示该时段不开放。
-func (s *AdminService) SetSlotTotals(ctx context.Context, dateStr string, items []SlotTotalInput) error {
+func (s *AdminService) SetSlotTotals(ctx context.Context, dateStr string, items []dto.SetSlotItem) error {
 	date, err := model.ParseDate(dateStr)
 	if err != nil {
 		return errs.BizMsg(errs.CodeInvalidParam, "日期格式应为 2006-01-02")

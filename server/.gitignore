@@ -1,4 +1,5 @@
 uploads/
+logs/
 bin/
 *.log
 .env

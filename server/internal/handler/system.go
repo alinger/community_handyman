@@ -10,6 +10,11 @@ import (
 )
 
 // Health 供负载均衡与部署检查探活。
+// @Summary      健康检查
+// @Tags         运维
+// @Produce      json
+// @Success      200  {object}  response.Body
+// @Router       /healthz [get]
 func Health(c *gin.Context) {
 	response.OK(c, gin.H{
 		"status": "ok",

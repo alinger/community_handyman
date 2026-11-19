@@ -1,24 +1,27 @@
 package handler
 
 import (
-	"encoding/json"
-
 	"github.com/gin-gonic/gin"
 
 	"github.com/alinger/community-handyman/server/internal/dto"
 	"github.com/alinger/community-handyman/server/internal/errs"
 	"github.com/alinger/community-handyman/server/internal/middleware"
 	"github.com/alinger/community-handyman/server/internal/model"
-	"github.com/alinger/community-handyman/server/internal/service"
 	"github.com/alinger/community-handyman/server/pkg/response"
 )
 
 // AdminLogin 后台登录。
+// @Summary      后台登录
+// @Description  返回 Bearer token，默认 12 小时有效
+// @Tags         运营后台
+// @Accept       json
+// @Produce      json
+// @Param        body  body  dto.AdminLoginReq  true  "账号密码"
+// @Success      200  {object}  response.Body
+// @Failure      200  {object}  response.Body  "1002 账号或密码错误"
+// @Router       /api/admin/login [post]
 func (a *API) AdminLogin(c *gin.Context) {
-	var req struct {
-		Username string `json:"username" binding:"required,max=32"`
-		Password string `json:"password" binding:"required,max=64"`
-	}
+	var req dto.AdminLoginReq
 	if !bindJSON(c, &req) {
 		return
 	}
@@ -39,6 +42,12 @@ func (a *API) AdminLogin(c *gin.Context) {
 }
 
 // AdminListAreas 服务范围列表。
+// @Summary      服务范围列表
+// @Tags         运营后台
+// @Produce      json
+// @Success      200  {object}  response.Body
+// @Security     AdminToken
+// @Router       /api/admin/areas [get]
 func (a *API) AdminListAreas(c *gin.Context) {
 	list, err := a.Admin.ListAreas(c.Request.Context())
 	if err != nil {
@@ -49,14 +58,16 @@ func (a *API) AdminListAreas(c *gin.Context) {
 }
 
 // AdminCreateArea 新增服务范围。
+// @Summary      新增服务范围
+// @Tags         运营后台
+// @Accept       json
+// @Produce      json
+// @Param        body  body  dto.CreateAreaReq  true  "范围规则"
+// @Success      201  {object}  response.Body
+// @Security     AdminToken
+// @Router       /api/admin/areas [post]
 func (a *API) AdminCreateArea(c *gin.Context) {
-	var req struct {
-		Community   string `json:"community" binding:"required,max=64"`
-		Lane        string `json:"lane" binding:"required,max=128"`
-		HouseFrom   int    `json:"house_from" binding:"min=0"`
-		HouseTo     int    `json:"house_to" binding:"min=0"`
-		HouseParity string `json:"house_parity" binding:"omitempty,oneof=all odd even"`
-	}
+	var req dto.CreateAreaReq
 	if !bindJSON(c, &req) {
 		return
 	}
@@ -76,15 +87,23 @@ func (a *API) AdminCreateArea(c *gin.Context) {
 }
 
 // AdminSetAreaStatus 启停服务范围。
+// @Summary      启停服务范围
+// @Description  停用不影响已存在的订单
+// @Tags         运营后台
+// @Accept       json
+// @Produce      json
+// @Param        id    path  int                     true  "范围 ID"
+// @Param        body  body  dto.SetAreaStatusReq    true  "1 启用 / 0 停用"
+// @Success      200  {object}  response.Body
+// @Security     AdminToken
+// @Router       /api/admin/areas/{id}/status [patch]
 func (a *API) AdminSetAreaStatus(c *gin.Context) {
 	id := uint64(atoiDefault(c.Param("id"), 0))
 	if id == 0 {
 		response.Fail(c, errs.BizMsg(errs.CodeInvalidParam, "ID 不合法"))
 		return
 	}
-	var req struct {
-		Status int8 `json:"status" binding:"oneof=0 1"`
-	}
+	var req dto.SetAreaStatusReq
 	if !bindJSON(c, &req) {
 		return
 	}
@@ -96,6 +115,13 @@ func (a *API) AdminSetAreaStatus(c *gin.Context) {
 }
 
 // AdminListSlots 某天时段库存。
+// @Summary      某天时段库存
+// @Tags         运营后台
+// @Produce      json
+// @Param        date  query  string  true  "日期，格式 2006-01-02"
+// @Success      200  {object}  response.Body
+// @Security     AdminToken
+// @Router       /api/admin/slots [get]
 func (a *API) AdminListSlots(c *gin.Context) {
 	list, err := a.Admin.ListSlots(c.Request.Context(), c.Query("date"))
 	if err != nil {
@@ -106,11 +132,17 @@ func (a *API) AdminListSlots(c *gin.Context) {
 }
 
 // AdminSetSlots 批量设置时段可接单量。
+// @Summary      批量设置时段可接单量
+// @Description  total=0 表示该时段不开放
+// @Tags         运营后台
+// @Accept       json
+// @Produce      json
+// @Param        body  body  dto.SetSlotsReq  true  "日期与时段列表"
+// @Success      200  {object}  response.Body
+// @Security     AdminToken
+// @Router       /api/admin/slots [put]
 func (a *API) AdminSetSlots(c *gin.Context) {
-	var req struct {
-		Date  string                   `json:"date" binding:"required"`
-		Items []service.SlotTotalInput `json:"items" binding:"required,min=1,dive"`
-	}
+	var req dto.SetSlotsReq
 	if !bindJSON(c, &req) {
 		return
 	}
@@ -127,6 +159,12 @@ func (a *API) AdminSetSlots(c *gin.Context) {
 }
 
 // AdminListSkus 服务产品列表。
+// @Summary      服务产品列表
+// @Tags         运营后台
+// @Produce      json
+// @Success      200  {object}  response.Body
+// @Security     AdminToken
+// @Router       /api/admin/skus [get]
 func (a *API) AdminListSkus(c *gin.Context) {
 	list, err := a.Admin.ListSkus(c.Request.Context())
 	if err != nil {
@@ -137,16 +175,23 @@ func (a *API) AdminListSkus(c *gin.Context) {
 }
 
 // AdminUpdateSku 改价格与计价规则（含加价日期）。
+// @Summary      改价与计价规则
+// @Description  rules 做 JSON 部分合并，只传要改的键（如 holiday_dates），其余计价参数保持不变
+// @Tags         运营后台
+// @Accept       json
+// @Produce      json
+// @Param        id    path  int                true  "SKU ID"
+// @Param        body  body  dto.UpdateSkuReq   true  "价格与规则"
+// @Success      200  {object}  response.Body
+// @Security     AdminToken
+// @Router       /api/admin/skus/{id} [put]
 func (a *API) AdminUpdateSku(c *gin.Context) {
 	id := uint64(atoiDefault(c.Param("id"), 0))
 	if id == 0 {
 		response.Fail(c, errs.BizMsg(errs.CodeInvalidParam, "ID 不合法"))
 		return
 	}
-	var req struct {
-		BasePrice int64           `json:"base_price" binding:"min=0"`
-		Rules     json.RawMessage `json:"rules"`
-	}
+	var req dto.UpdateSkuReq
 	if !bindJSON(c, &req) {
 		return
 	}
@@ -158,6 +203,17 @@ func (a *API) AdminUpdateSku(c *gin.Context) {
 }
 
 // AdminListOrders 后台订单查询。
+// @Summary      后台订单查询
+// @Tags         运营后台
+// @Produce      json
+// @Param        status        query  string  false  "订单状态"
+// @Param        service_type  query  string  false  "服务类型"
+// @Param        keyword       query  string  false  "订单号模糊搜索"
+// @Param        page          query  int     false  "页码"
+// @Param        size          query  int     false  "每页条数"
+// @Success      200  {object}  response.Body
+// @Security     AdminToken
+// @Router       /api/admin/orders [get]
 func (a *API) AdminListOrders(c *gin.Context) {
 	page := atoiDefault(c.Query("page"), 1)
 	size := atoiDefault(c.Query("size"), 10)
@@ -175,10 +231,18 @@ func (a *API) AdminListOrders(c *gin.Context) {
 }
 
 // AdminAssign 派单或改派。
+// @Summary      派单或改派
+// @Description  仅待接单的订单可派
+// @Tags         运营后台
+// @Accept       json
+// @Produce      json
+// @Param        orderNo  path  string             true  "订单号"
+// @Param        body     body  dto.AssignOrderReq true  "服务方 ID"
+// @Success      200  {object}  response.Body
+// @Security     AdminToken
+// @Router       /api/admin/orders/{orderNo}/assign [post]
 func (a *API) AdminAssign(c *gin.Context) {
-	var req struct {
-		ProviderID uint64 `json:"provider_id" binding:"required"`
-	}
+	var req dto.AssignOrderReq
 	if !bindJSON(c, &req) {
 		return
 	}
@@ -190,12 +254,18 @@ func (a *API) AdminAssign(c *gin.Context) {
 }
 
 // AdminRefund 发起退款。amount 为 0 表示全额退剩余部分。
+// @Summary      发起退款
+// @Description  仅 admin 角色可调用。amount 为 0 表示全额退剩余部分；全额退款且未履约时订单自动关闭并释放时段
+// @Tags         运营后台
+// @Accept       json
+// @Produce      json
+// @Param        body  body  dto.RefundReq  true  "退款参数"
+// @Success      200  {object}  response.Body
+// @Failure      403  {object}  response.Body  "1003 需要超管权限"
+// @Security     AdminToken
+// @Router       /api/admin/refunds [post]
 func (a *API) AdminRefund(c *gin.Context) {
-	var req struct {
-		OrderNo string `json:"order_no" binding:"required,max=32"`
-		Amount  int64  `json:"amount" binding:"min=0"`
-		Reason  string `json:"reason" binding:"required,max=200"`
-	}
+	var req dto.RefundReq
 	if !bindJSON(c, &req) {
 		return
 	}
@@ -213,10 +283,18 @@ func (a *API) AdminRefund(c *gin.Context) {
 }
 
 // CancelOrder 用户取消订单。2 小时内返回需审核标志，不直接取消。
+// @Summary      用户取消订单
+// @Description  距服务开始 2 小时外免费取消并退款；2 小时内返回 need_review；已开始不可取消
+// @Tags         订单
+// @Accept       json
+// @Produce      json
+// @Param        orderNo  path  string           true   "订单号"
+// @Param        body     body  dto.CancelOrderReq  false  "取消原因"
+// @Success      200  {object}  response.Body  "data 为 service.CancelResult"
+// @Security     UserID
+// @Router       /api/v1/orders/{orderNo}/cancel [post]
 func (a *API) CancelOrder(c *gin.Context) {
-	var req struct {
-		Reason string `json:"reason" binding:"max=200"`
-	}
+	var req dto.CancelOrderReq
 	if c.Request.ContentLength > 0 && !bindJSON(c, &req) {
 		return
 	}

@@ -312,6 +312,15 @@ func (a *API) DevLogin(c *gin.Context) {
 	response.OK(c, gin.H{"user_id": u.ID, "openid": u.OpenID, "nickname": u.Nickname, "role": u.Role})
 }
 
+// DevMockPay 模拟支付成功，仅 dev 环境注册该路由。
+func (a *API) DevMockPay(c *gin.Context) {
+	if err := a.Payment.MockPay(c.Request.Context(), c.Param("orderNo")); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{"paid": true})
+}
+
 // atoiDefault 解析查询参数，失败时取默认值。
 func atoiDefault(s string, def int) int {
 	if s == "" {

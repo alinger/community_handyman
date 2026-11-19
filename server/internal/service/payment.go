@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -101,6 +102,32 @@ func (s *PaymentService) HandleNotify(ctx context.Context, header http.Header, b
 			Remark:   "支付成功，等待服务方接单",
 		})
 	})
+}
+
+// MockPay 模拟一笔支付成功，仅沙箱渠道可用，且只在 dev 环境注册路由。
+// 前端开发阶段没有商户号，靠它走完「下单 → 回调 → 状态推进」整条链路。
+func (s *PaymentService) MockPay(ctx context.Context, orderNo string) error {
+	sb, ok := s.gw.(*payment.Sandbox)
+	if !ok {
+		return errs.BizMsg(errs.CodeInvalidParam, "当前支付渠道不支持模拟支付")
+	}
+
+	o, err := s.orders.GetByNo(ctx, orderNo)
+	if err != nil {
+		return errs.Wrap(errs.CodeInternal, err)
+	}
+	if o == nil {
+		return errs.Biz(errs.CodeNotFound)
+	}
+	if o.TotalAmount <= 0 {
+		return errs.BizMsg(errs.CodeIllegalStatus, "订单金额为 0，无需支付")
+	}
+
+	txid := "mock_" + o.OrderNo
+	body := []byte(fmt.Sprintf(`{"order_no":%q,"transaction_id":%q,"amount":%d,"sign":%q}`,
+		o.OrderNo, txid, o.TotalAmount, sb.Sign(o.OrderNo, txid, o.TotalAmount)))
+
+	return s.HandleNotify(ctx, http.Header{}, body)
 }
 
 func timePtr(t time.Time) *time.Time { return &t }

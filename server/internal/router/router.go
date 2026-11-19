@@ -123,6 +123,11 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 			authed.POST("/orders/:orderNo/quote/reject", api.RejectQuote)
 			authed.GET("/orders/:orderNo/monthly", api.MonthlyDetail)
 
+			// 沙箱模拟支付，仅 dev 注册；生产环境走真实回调
+			if cfg.App.Env == "dev" {
+				authed.POST("/dev/orders/:orderNo/mock-pay", api.DevMockPay)
+			}
+
 			// 服务记录：可上传、可读，不提供删除
 			authed.POST("/orders/:orderNo/records", api.UploadRecord)
 			authed.GET("/orders/:orderNo/records", api.ListRecords)

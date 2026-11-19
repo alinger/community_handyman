@@ -16,6 +16,7 @@ const form = reactive({
   community: '',
   lane: '',
   house_no: '',
+  contact_name: '',
   contact_phone: '',
 })
 
@@ -32,6 +33,7 @@ function openAdd() {
   form.community = user.currentAddress?.community || ''
   form.lane = ''
   form.house_no = ''
+  form.contact_name = ''
   form.contact_phone = ''
   checkMsg.value = null
   showAdd.value = true
@@ -71,6 +73,7 @@ async function onSave() {
       community: form.community.trim(),
       lane: form.lane.trim(),
       house_no: form.house_no.trim(),
+      contact_name: form.contact_name.trim(),
       contact_phone: form.contact_phone.trim(),
     })
     await user.loadAddresses()
@@ -159,6 +162,9 @@ function callService() {
         <view class="addr-main">
           <view class="addr-title">{{ a.community }}</view>
           <view class="addr-detail">{{ a.lane }} {{ a.house_no }} {{ a.extra }}</view>
+          <view v-if="a.contact_name || a.contact_phone" class="addr-contact">
+            {{ a.contact_name }}<text v-if="a.contact_name && a.contact_phone"> · </text>{{ a.contact_phone }}
+          </view>
         </view>
         <view v-if="user.currentAddressId === a.id" class="tag">默认</view>
       </view>
@@ -205,13 +211,22 @@ function callService() {
           <input v-model="form.house_no" class="form-input" placeholder="如：45号" @blur="onCheck" />
         </view>
         <view class="form-item">
+          <text class="form-label">联系人</text>
+          <input
+            v-model="form.contact_name"
+            class="form-input"
+            maxlength="16"
+            placeholder="如：张阿姨"
+          />
+        </view>
+        <view class="form-item">
           <text class="form-label">联系电话</text>
           <input
             v-model="form.contact_phone"
             class="form-input"
             type="number"
             maxlength="11"
-            placeholder="选填"
+            placeholder="上门服务联系用"
           />
         </view>
 
@@ -302,6 +317,12 @@ function callService() {
 .addr-detail {
   font-size: 24rpx;
   color: var(--text-sub);
+  margin-top: 6rpx;
+}
+
+.addr-contact {
+  font-size: 23rpx;
+  color: var(--brand-dark);
   margin-top: 6rpx;
 }
 

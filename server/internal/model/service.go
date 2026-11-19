@@ -22,6 +22,7 @@ type Address struct {
 	Lane          string  `gorm:"size:64;not null" json:"lane"`
 	HouseNo       string  `gorm:"size:32;not null" json:"house_no"`
 	Extra         string  `gorm:"size:255;not null;default:''" json:"extra"`
+	ContactName   string  `gorm:"size:32;not null;default:''" json:"contact_name"`
 	ContactPhone  string  `gorm:"size:20;not null;default:''" json:"contact_phone"`
 	InServiceArea bool    `gorm:"not null;default:false" json:"in_service_area"`
 	AreaID        *uint64 `gorm:"index:idx_addresses_area_id" json:"area_id"`

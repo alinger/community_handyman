@@ -46,6 +46,7 @@ func (s *AddressService) Create(ctx context.Context, userID uint64, req dto.Crea
 		Lane:          req.Lane,
 		HouseNo:       req.HouseNo,
 		Extra:         req.Extra,
+		ContactName:   req.ContactName,
 		ContactPhone:  req.ContactPhone,
 		InServiceArea: true,
 		AreaID:        &area.ID,
@@ -73,6 +74,7 @@ func ToAddressResp(a *model.Address) dto.AddressResp {
 		Lane:          a.Lane,
 		HouseNo:       a.HouseNo,
 		Extra:         a.Extra,
+		ContactName:   a.ContactName,
 		ContactPhone:  a.ContactPhone,
 		InServiceArea: a.InServiceArea,
 	}

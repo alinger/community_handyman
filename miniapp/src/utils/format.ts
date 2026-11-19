@@ -26,7 +26,7 @@ export const SERVICE_LABEL: Record<string, string> = {
 export const SERVICE_DESC: Record<string, string> = {
   garbage: '按袋计费，单次 5 元起',
   dogwalk: '20 分钟起，可加时长',
-  accompany: '按小时计费，人工报价',
+  accompany: '按项目明码计价',
 }
 
 /** 订单状态文案 */

@@ -20,6 +20,9 @@ type Order struct {
 	DurationMin     int         `gorm:"not null;default:0" json:"duration_min"`
 	DistanceKm      *float64    `gorm:"type:decimal(5,2)" json:"distance_km"`
 	GarbageType     string      `gorm:"size:16;not null;default:''" json:"garbage_type"`
+	Hospital        string      `gorm:"size:64;not null;default:''" json:"hospital"`
+	PatientName     string      `gorm:"size:32;not null;default:''" json:"patient_name"`
+	ServiceItems    JSON        `gorm:"type:json" json:"service_items"`
 	Remark          string      `gorm:"size:200;not null;default:''" json:"remark"`
 	PricingSnapshot JSON        `gorm:"type:json" json:"pricing_snapshot"`
 	TotalAmount     int64       `gorm:"not null;default:0" json:"total_amount"`
@@ -71,7 +74,8 @@ type ServiceRecord struct {
 
 func (ServiceRecord) TableName() string { return "service_records" }
 
-// Quote 陪诊报价单。陪诊不做自动定价，报价、协商、用户确认三步都要留痕。
+// Quote 陪诊报价单（历史兼容）。陪诊自 000006 起按服务项自动计价，新订单不再产生报价单；
+// 本表保留以让改造前的订单仍可查询报价记录。
 type Quote struct {
 	BaseModel
 	OrderID        uint64     `gorm:"not null;index:idx_quotes_order_id" json:"order_id"`

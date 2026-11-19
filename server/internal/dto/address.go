@@ -7,6 +7,7 @@ type CreateAddressReq struct {
 	Lane         string `json:"lane" binding:"required,max=64"`
 	HouseNo      string `json:"house_no" binding:"required,max=32"`
 	Extra        string `json:"extra" binding:"max=255"`
+	ContactName  string `json:"contact_name" binding:"max=32"`
 	ContactPhone string `json:"contact_phone" binding:"max=20"`
 }
 
@@ -17,6 +18,7 @@ type AddressResp struct {
 	Lane          string `json:"lane"`
 	HouseNo       string `json:"house_no"`
 	Extra         string `json:"extra"`
+	ContactName   string `json:"contact_name"`
 	ContactPhone  string `json:"contact_phone"`
 	InServiceArea bool   `json:"in_service_area"`
 }

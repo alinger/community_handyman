@@ -126,16 +126,105 @@ func TestCalcGarbage(t *testing.T) {
 	}
 }
 
-func TestCalcAccompanyIsManual(t *testing.T) {
-	got, err := Calc(Input{ServiceType: ServiceAccompany, Plan: PlanSingle})
+// accompanyRules 与 000006 迁移里的陪诊配置结构一致（子集，便于断言）。
+const accompanyRules = `{
+  "billing": "itemized",
+  "hospitals": [
+    {"code": "renji_east", "name": "仁济医院东院"},
+    {"code": "zhoupu", "name": "周浦医院"}
+  ],
+  "service_items": [
+    {"code": "registration", "name": "取号", "price": 500},
+    {"code": "guide", "name": "引导就诊", "price": 2000},
+    {"code": "medicine", "name": "取药取报告", "price": 1000}
+  ]
+}`
+
+func TestCalcAccompanyByItems(t *testing.T) {
+	cases := []struct {
+		name      string
+		rules     string
+		hospital  string
+		items     []string
+		want      int64
+		wantItems int
+		wantErr   bool
+	}{
+		{
+			name: "多选按后台配置求和", hospital: "renji_east",
+			items: []string{"registration", "guide"}, want: 2500, wantItems: 2,
+		},
+		{
+			name: "重复 code 只计一次", hospital: "zhoupu",
+			items: []string{"guide", "guide", "medicine"}, want: 3000, wantItems: 2,
+		},
+		{
+			name: "按配置顺序输出明细", hospital: "renji_east",
+			items: []string{"medicine", "registration"}, want: 1500, wantItems: 2,
+		},
+		{
+			name: "未选服务项", hospital: "renji_east", items: nil, wantErr: true,
+		},
+		{
+			name: "医院不在后台选项内", hospital: "随手填的医院",
+			items: []string{"guide"}, wantErr: true,
+		},
+		{
+			name: "伪造服务项 code", hospital: "renji_east",
+			items: []string{"guide", "not_configured"}, wantErr: true,
+		},
+		{
+			name: "后台未配置服务项", hospital: "renji_east",
+			items: []string{"guide"}, rules: `{"hospitals":[{"code":"renji_east","name":"仁济医院东院"}]}`, wantErr: true,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rules := c.rules
+			if rules == "" {
+				rules = accompanyRules
+			}
+			got, err := Calc(Input{
+				ServiceType: ServiceAccompany, Plan: PlanSingle,
+				Hospital: c.hospital, ServiceItems: c.items,
+				Rules: json.RawMessage(rules),
+			})
+			if c.wantErr {
+				if err == nil {
+					t.Fatalf("应当报错，实际得到金额 %d", got.Total)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("陪诊计价报错: %v", err)
+			}
+			if got.ManualQuote {
+				t.Fatal("陪诊已改为自动计价，不应再标记人工报价")
+			}
+			if got.Total != c.want {
+				t.Fatalf("金额不符，期望 %d 实际 %d，明细 %+v", c.want, got.Total, got.Items)
+			}
+			if len(got.Items) != c.wantItems {
+				t.Fatalf("明细条数不符，期望 %d 实际 %d", c.wantItems, len(got.Items))
+			}
+		})
+	}
+}
+
+func TestParseAccompanyOptions(t *testing.T) {
+	opts, err := ParseAccompanyOptions(json.RawMessage(accompanyRules))
 	if err != nil {
-		t.Fatalf("陪诊计价报错: %v", err)
+		t.Fatalf("解析失败: %v", err)
 	}
-	if !got.ManualQuote {
-		t.Fatal("陪诊应标记为人工报价")
+	if !opts.HospitalValid("renji_east") || opts.HospitalValid("unknown") {
+		t.Fatal("医院选项校验不正确")
 	}
-	if got.Total != 0 {
-		t.Fatalf("人工报价金额应为 0，实际 %d", got.Total)
+	if it, ok := opts.FindItem("guide"); !ok || it.Price != 2000 || it.Name != "引导就诊" {
+		t.Fatalf("服务项查找不正确: %+v, %v", it, ok)
+	}
+	if _, ok := opts.FindItem("unknown"); ok {
+		t.Fatal("未配置的 code 不应被找到")
 	}
 }
 

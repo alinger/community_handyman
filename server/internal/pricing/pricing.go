@@ -21,6 +21,10 @@ type Input struct {
 	DistanceKm  float64 `json:"distance_km"`  // 服务者到地址的距离
 	FeedOnly    bool    `json:"feed_only"`    // 仅喂食清洁，不含遛
 
+	Hospital     string   `json:"hospital"`      // 就诊医院 code，陪诊必填且必须来自后台选项
+	PatientName  string   `json:"patient_name"`  // 就诊人
+	ServiceItems []string `json:"service_items"` // 已勾选的陪诊服务项 code
+
 	NeedFamiliar   bool `json:"need_familiar"`   // 是否需要提前上门熟悉
 	FamiliarOrders int  `json:"familiar_orders"` // 该用户历史完成订单数，用于熟悉费减免
 
@@ -53,7 +57,7 @@ type Item struct {
 type Result struct {
 	Total       int64  `json:"total"`        // 应付总额，单位分
 	Items       []Item `json:"items"`        // 明细，必须展示给用户
-	ManualQuote bool   `json:"manual_quote"` // 陪诊需人工报价，此时 Total 为 0
+	ManualQuote bool   `json:"manual_quote"` // 历史字段：陪诊改为自动计价后恒为 false
 }
 
 // DogWalkRules 遛宠计价参数，对应 service_skus.rules。
@@ -227,17 +231,44 @@ func calcDogWalk(in Input) (Result, error) {
 	return Result{Total: total, Items: items}, nil
 }
 
+// calcAccompany 按后台配置的服务项单价求和。
+// 用户只回传 code，价格一律从 SKU 规则读取，前端无法篡改金额；
+// 医院必须来自后台选项，防止用自由文本绕过配置。
 func calcAccompany(in Input) (Result, error) {
-	// 陪诊按小时人工协商，不做自动定价
-	return Result{
-		Total:       0,
-		ManualQuote: true,
-		Items: []Item{{
-			Name:   "陪诊服务",
-			Amount: 0,
-			Note:   "按小时计费，提交后由运营报价确认",
-		}},
-	}, nil
+	opts, err := ParseAccompanyOptions(in.Rules)
+	if err != nil {
+		return Result{}, err
+	}
+	if len(opts.ServiceItems) == 0 {
+		return Result{}, fmt.Errorf("陪诊服务项尚未配置，请联系运营在后台设置")
+	}
+	if !opts.HospitalValid(in.Hospital) {
+		return Result{}, fmt.Errorf("请选择列表中的就诊医院")
+	}
+	if len(in.ServiceItems) == 0 {
+		return Result{}, fmt.Errorf("请至少选择一项陪诊服务")
+	}
+
+	// 先把用户勾选的 code 去重，任何一个不在配置里都直接拒绝，避免静默少算
+	wanted := make(map[string]struct{}, len(in.ServiceItems))
+	for _, code := range in.ServiceItems {
+		if _, ok := opts.FindItem(code); !ok {
+			return Result{}, fmt.Errorf("包含未配置的陪诊服务项，请刷新后重试")
+		}
+		wanted[code] = struct{}{}
+	}
+
+	// 按后台配置顺序展开明细，价格全部取自配置
+	items := make([]Item, 0, len(wanted))
+	var total int64
+	for _, it := range opts.ServiceItems {
+		if _, ok := wanted[it.Code]; !ok {
+			continue
+		}
+		items = append(items, Item{Name: it.Name, Amount: it.Price})
+		total += it.Price
+	}
+	return Result{Total: total, Items: items}, nil
 }
 
 // matchHoliday 判断日期是否落在配置的加价日期内。

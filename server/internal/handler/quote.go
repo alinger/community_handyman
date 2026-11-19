@@ -8,9 +8,9 @@ import (
 	"github.com/alinger/community-handyman/server/pkg/response"
 )
 
-// AdminCreateQuote 运营给陪诊订单报价。
-// @Summary      陪诊报价
-// @Description  写入报价单并把订单金额改为报价额；用户已确认后不可再改
+// AdminCreateQuote 运营给历史陪诊订单报价（兼容旧流程）。
+// @Summary      历史陪诊报价（兼容旧订单）
+// @Description  仅用于金额为 0 的历史待报价订单；新陪诊订单已按所选服务项自动计价，调用返回 2003
 // @Tags         运营后台
 // @Accept       json
 // @Produce      json
@@ -38,9 +38,9 @@ func (a *API) AdminCreateQuote(c *gin.Context) {
 	})
 }
 
-// RejectQuote 用户拒绝陪诊报价，订单关闭并释放时段。
-// @Summary      拒绝陪诊报价
-// @Description  订单关闭并释放时段
+// RejectQuote 用户拒绝历史陪诊报价，订单关闭并释放时段（兼容旧流程）。
+// @Summary      拒绝历史陪诊报价（兼容旧订单）
+// @Description  仅用于历史待报价订单；订单关闭并释放时段
 // @Tags         订单
 // @Accept       json
 // @Produce      json

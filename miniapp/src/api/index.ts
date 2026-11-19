@@ -10,8 +10,26 @@ export interface Address {
   lane: string
   house_no: string
   extra: string
+  contact_name: string
   contact_phone: string
   in_service_area: boolean
+}
+
+/** 陪诊可选项，来自后台 service_skus.rules 配置，价格单位分 */
+export interface AccompanyHospital {
+  code: string
+  name: string
+}
+
+export interface AccompanyServiceItem {
+  code: string
+  name: string
+  price: number
+}
+
+export interface AccompanyOptions {
+  hospitals: AccompanyHospital[]
+  service_items: AccompanyServiceItem[]
 }
 
 export interface PriceItem {
@@ -59,6 +77,9 @@ export interface Order {
   price_items?: PriceItem[]
   pay_expires_at?: string
   quote?: Quote
+  hospital?: string
+  patient_name?: string
+  accompany_items?: PriceItem[]
 }
 
 export interface PayParams {
@@ -118,6 +139,10 @@ export interface CreateOrderPayload {
   remark?: string
   feed_only?: boolean
   need_familiar?: boolean
+  /** 陪诊专用：只回传 code，价格由后端按 SKU 配置计算 */
+  hospital?: string
+  patient_name?: string
+  service_items?: string[]
 }
 
 /**
@@ -142,9 +167,15 @@ export function createAddress(data: {
   lane: string
   house_no: string
   extra?: string
+  contact_name?: string
   contact_phone?: string
 }) {
   return request<Address>({ url: '/api/v1/addresses', method: 'POST', data })
+}
+
+/** 陪诊可选项：医院与可多选服务项（含单价），由后台配置 */
+export function accompanyOptions() {
+  return request<AccompanyOptions>({ url: '/api/v1/services/accompany/options' })
 }
 
 export function checkArea(data: { community: string; lane: string; house_no: string }) {

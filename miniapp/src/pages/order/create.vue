@@ -2,7 +2,15 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import CalendarPicker from '@/components/CalendarPicker.vue'
-import { createOrder, previewOrder, type CreateOrderPayload, type PreviewResp } from '@/api'
+import {
+  accompanyOptions,
+  createOrder,
+  previewOrder,
+  type AccompanyHospital,
+  type AccompanyServiceItem,
+  type CreateOrderPayload,
+  type PreviewResp,
+} from '@/api'
 import { useUserStore } from '@/store/user'
 import { availableSlots, nextDays, price, SLOTS } from '@/utils/format'
 import { ApiError } from '@/utils/request'
@@ -28,8 +36,8 @@ const form = reactive({
   feedOnly: false,
   needFamiliar: false,
   patientName: '',
-  hospital: '',
-  department: '',
+  hospital: '', // 存 code，名称从后台选项映射
+  serviceItems: [] as string[], // 已勾选的陪诊服务项 code
   remark: '',
 })
 
@@ -38,12 +46,20 @@ const previewError = ref('')
 const submitting = ref(false)
 const showCalendar = ref(false)
 
+/** 陪诊可选项全部来自后台配置，前端不内置医院与服务项 */
+const hospitals = ref<AccompanyHospital[]>([])
+const serviceItemOptions = ref<AccompanyServiceItem[]>([])
+
+const hospitalName = computed(() =>
+  hospitals.value.find((h) => h.code === form.hospital)?.name || '',
+)
+
 /** 顶部 banner 按服务类型切换文案 */
 const banner = computed(() => {
   const map: Record<string, { title: string; sub: string; art: string }> = {
     garbage: { title: '上门代倒垃圾', sub: '规范分类，按时上门', art: '🗑' },
     dogwalk: { title: '上门遛宠', sub: '20 分钟起，可加时长', art: '🐾' },
-    accompany: { title: '医院陪诊', sub: '按小时计费，人工报价', art: '🏥' },
+    accompany: { title: '医院陪诊', sub: '按项目明码计价', art: '🏥' },
   }
   return map[form.serviceType] || map.garbage
 })
@@ -56,6 +72,13 @@ const addressText = computed(() => {
   const a = user.currentAddress
   if (!a) return ''
   return `${a.community} ${a.lane} ${a.house_no}`
+})
+
+/** 所有服务都在地址卡展示联系人与联系方式，方便服务方上门联系 */
+const addressContact = computed(() => {
+  const a = user.currentAddress
+  if (!a) return ''
+  return [a.contact_name, a.contact_phone].filter(Boolean).join(' · ')
 })
 
 const timeText = computed(() => {
@@ -75,9 +98,45 @@ onLoad(async (query) => {
   } catch (e) {
     console.warn('[create] 初始化失败', e)
   }
+  await loadAccompanyOptions()
   syncSlot()
   refreshPreview()
 })
+
+/** 医院与陪诊服务项都从后台拉取，用户只能选、不能自由输入 */
+async function loadAccompanyOptions() {
+  try {
+    const opts = await accompanyOptions()
+    hospitals.value = opts.hospitals || []
+    serviceItemOptions.value = opts.service_items || []
+    if (!hospitals.value.some((h) => h.code === form.hospital)) {
+      form.hospital = hospitals.value[0]?.code || ''
+    }
+    const valid = new Set(serviceItemOptions.value.map((it) => it.code))
+    form.serviceItems = form.serviceItems.filter((c) => valid.has(c))
+  } catch (e) {
+    console.warn('[create] 陪诊选项加载失败', e)
+  }
+}
+
+function chooseHospital() {
+  if (!hospitals.value.length) {
+    uni.showToast({ title: '暂无可选医院', icon: 'none' })
+    return
+  }
+  uni.showActionSheet({
+    itemList: hospitals.value.map((h) => h.name),
+    success: (r) => {
+      form.hospital = hospitals.value[r.tapIndex].code
+    },
+  })
+}
+
+function toggleServiceItem(code: string) {
+  const i = form.serviceItems.indexOf(code)
+  if (i >= 0) form.serviceItems.splice(i, 1)
+  else form.serviceItems.push(code)
+}
 
 function syncSlot() {
   const list = slots.value
@@ -102,6 +161,8 @@ watch(
     form.durationMin,
     form.feedOnly,
     form.needFamiliar,
+    form.hospital,
+    form.serviceItems.join(','), // 数组内容变化也要触发试算
   ],
   () => {
     if (timer) clearTimeout(timer)
@@ -130,14 +191,11 @@ function buildPayload(): CreateOrderPayload | null {
     payload.feed_only = form.feedOnly
     payload.need_familiar = form.needFamiliar
   } else {
-    // 陪诊信息后端暂无结构化字段，拼进备注由运营报价时读取
-    const parts = [
-      form.patientName && `就诊人：${form.patientName}`,
-      form.hospital && `医院：${form.hospital}`,
-      form.department && `科室：${form.department}`,
-      form.remark,
-    ].filter(Boolean)
-    payload.remark = parts.join('；').slice(0, 200)
+    // 陪诊：只回传后台配置项的 code，价格由后端按 SKU 规则计算
+    payload.hospital = form.hospital
+    payload.patient_name = form.patientName.trim()
+    payload.service_items = [...form.serviceItems]
+    payload.remark = form.remark
   }
 
   return payload
@@ -198,9 +256,15 @@ async function submit() {
     showCalendar.value = true
     return
   }
-  if (form.serviceType === 'accompany' && !form.hospital) {
-    uni.showToast({ title: '请填写就诊医院', icon: 'none' })
-    return
+  if (form.serviceType === 'accompany') {
+    if (!form.hospital) {
+      uni.showToast({ title: '请选择就诊医院', icon: 'none' })
+      return
+    }
+    if (!form.serviceItems.length) {
+      uni.showToast({ title: '请至少选择一项陪诊服务', icon: 'none' })
+      return
+    }
   }
 
   const payload = buildPayload()
@@ -209,19 +273,6 @@ async function submit() {
   submitting.value = true
   try {
     const res = await createOrder(payload)
-
-    if (res.manual_quote) {
-      uni.showModal({
-        title: '已提交，等待报价',
-        content: '陪诊按小时人工报价，运营确认后会通知你支付',
-        showCancel: false,
-        success: () => {
-          uni.redirectTo({ url: `/pages/order/detail?orderNo=${res.order.order_no}` })
-        },
-      })
-      return
-    }
-
     await startPay(res.order.order_no)
     uni.redirectTo({ url: `/pages/order/detail?orderNo=${res.order.order_no}` })
   } catch (e) {
@@ -276,13 +327,17 @@ async function startPay(orderNo: string) {
       <view class="banner-art">{{ banner.art }}</view>
     </view>
 
-    <!-- 服务地址 -->
+    <!-- 服务地址：地址 + 联系人与联系方式 -->
     <view class="card" @tap="chooseAddress">
       <view class="f-label">服务地址</view>
       <view class="f-value" :class="{ placeholder: !addressText }">
         <view class="pin" />
         <text class="f-text">{{ addressText || '请选择服务地址' }}</text>
         <text class="chev">›</text>
+      </view>
+      <view v-if="addressContact" class="addr-contact">
+        <text class="contact-dot" />
+        <text>{{ addressContact }}</text>
       </view>
     </view>
 
@@ -365,23 +420,36 @@ async function startPay(orderNo: string) {
       <view class="f-hint">累计完成 5 单后免熟悉费</view>
     </view>
 
-    <!-- 陪诊信息 -->
+    <!-- 陪诊信息：医院只能从后台选项选，服务项可多选 -->
     <view v-if="form.serviceType === 'accompany'" class="card">
       <view class="f-row">
         <view class="f-label">就诊人</view>
         <input v-model="form.patientName" class="f-input" placeholder="如：张阿姨" />
       </view>
       <view class="divider" />
-      <view class="f-row">
+      <view class="f-value" :class="{ placeholder: !hospitalName }" @tap="chooseHospital">
         <view class="f-label">就诊医院</view>
-        <input v-model="form.hospital" class="f-input" placeholder="如：仁济医院东院" />
+        <text class="f-text">{{ hospitalName || '请选择就诊医院' }}</text>
+        <text class="chev">›</text>
       </view>
       <view class="divider" />
-      <view class="f-row">
-        <view class="f-label">科室</view>
-        <input v-model="form.department" class="f-input" placeholder="如：心内科" />
+      <view class="f-label">陪诊服务 <text class="f-label-sub">（可多选）</text></view>
+      <view class="service-grid">
+        <view
+          v-for="it in serviceItemOptions"
+          :key="it.code"
+          class="service-chip"
+          :class="{ active: form.serviceItems.includes(it.code) }"
+          @tap="toggleServiceItem(it.code)"
+        >
+          <view class="service-chip-name">
+            <text class="check-box">{{ form.serviceItems.includes(it.code) ? '✓' : '' }}</text>
+            <text>{{ it.name }}</text>
+          </view>
+          <text class="service-chip-price">{{ price(it.price) }}</text>
+        </view>
       </view>
-      <view class="f-hint">陪诊按小时人工报价，提交后运营会联系确认</view>
+      <view class="f-hint">按所选项目计价，医院与服务项均由社区统一配置</view>
     </view>
 
     <!-- 备注 -->
@@ -400,12 +468,10 @@ async function startPay(orderNo: string) {
       <view class="fee-row">
         <text class="fee-label">费用估算</text>
         <text class="fee-amount">
-          {{ preview ? (preview.manual_quote ? '待报价' : price(preview.total)) : '--' }}
+          {{ preview ? price(preview.total) : '--' }}
         </text>
       </view>
-      <view class="fee-note">
-        {{ preview?.manual_quote ? '陪诊按小时人工报价' : '按当前价格计算，最终以订单为准' }}
-      </view>
+      <view class="fee-note">按当前所选项目计算，最终以订单为准</view>
       <view v-if="preview?.items?.length" class="fee-items">
         <view v-for="(it, i) in preview.items" :key="i" class="fee-item">
           <text>{{ it.name }}<text v-if="it.note" class="fee-item-note">（{{ it.note }}）</text></text>
@@ -512,6 +578,87 @@ async function startPay(orderNo: string) {
 .chev {
   color: var(--text-light);
   font-size: 26rpx;
+}
+
+/* 地址卡上的联系人与联系方式 */
+.addr-contact {
+  margin-top: 14rpx;
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  font-size: 23rpx;
+  color: var(--brand-dark);
+}
+
+.contact-dot {
+  width: 8rpx;
+  height: 8rpx;
+  border-radius: 50%;
+  background: var(--brand);
+  flex-shrink: 0;
+}
+
+.f-label-sub {
+  font-size: 22rpx;
+  font-weight: 400;
+  color: var(--text-light);
+}
+
+/* 陪诊服务项多选 */
+.service-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14rpx;
+  margin: 16rpx 0 4rpx;
+}
+
+.service-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8rpx;
+  padding: 18rpx 18rpx;
+  border: 1rpx solid #e3e8e6;
+  border-radius: 12rpx;
+  font-size: 24rpx;
+  color: var(--text-sub);
+}
+
+.service-chip.active {
+  border-color: var(--brand);
+  background: var(--brand-light);
+  color: var(--brand-dark);
+}
+
+.service-chip-name {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  min-width: 0;
+}
+
+.check-box {
+  width: 28rpx;
+  height: 28rpx;
+  border: 1rpx solid #cbd5d2;
+  border-radius: 6rpx;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20rpx;
+  color: #fff;
+}
+
+.service-chip.active .check-box {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+.service-chip-price {
+  font-size: 23rpx;
+  color: var(--accent);
+  flex-shrink: 0;
 }
 
 .pin {

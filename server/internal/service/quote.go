@@ -11,9 +11,11 @@ import (
 	"github.com/alinger/community-handyman/server/internal/repository"
 )
 
-// QuoteService 陪诊报价。
-// 陪诊不做自动定价：运营报价 → 用户确认并支付 → 报价单落 confirmed_at。
-// 用户拒绝时关单并释放时段，避免占着库存又不成单。
+// QuoteService 陪诊报价（历史兼容）。
+// 陪诊自 000006 起改为按 SKU 配置的服务项自动计价，下单即支付，
+// 不再走「运营报价 → 用户确认」流程。本服务与报价表保留，只为让旧订单的
+// 报价记录仍可查询；Create 会拒绝新订单，避免把自动算好的金额改掉。
+// 用户拒绝旧报价时仍会关单并释放时段。
 type QuoteService struct {
 	db     *gorm.DB
 	orders *repository.OrderRepo
@@ -42,7 +44,13 @@ func (s *QuoteService) Create(ctx context.Context, adminID uint64, orderNo strin
 		return nil, errs.Biz(errs.CodeNotFound)
 	}
 	if o.ServiceType != model.ServiceAccompany {
-		return nil, errs.BizMsg(errs.CodeInvalidParam, "只有陪诊订单需要人工报价")
+		return nil, errs.BizMsg(errs.CodeInvalidParam, "只有陪诊订单可以报价")
+	}
+	// 陪诊自 000006 起按服务项自动计价，新订单金额 > 0，禁止再被人工改价；
+	// 金额为 0 的是改造前的历史待报价订单，仍允许运营报价收尾。
+	if o.TotalAmount > 0 {
+		return nil, errs.BizMsg(errs.CodeIllegalStatus,
+			"陪诊已按所选项目自动计价，无需人工报价；如需调整请修改后台服务项配置")
 	}
 	if o.Status != model.OrderPendingPayment {
 		return nil, errs.BizMsg(errs.CodeIllegalStatus, "订单已支付或已关闭，不能再报价")

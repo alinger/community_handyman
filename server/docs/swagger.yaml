@@ -59,6 +59,9 @@ definitions:
       community:
         maxLength: 64
         type: string
+      contact_name:
+        maxLength: 32
+        type: string
       contact_phone:
         maxLength: 20
         type: string
@@ -125,8 +128,15 @@ definitions:
         - other
         - recyclable
         type: string
+      hospital:
+        description: 陪诊专用：医院与服务项只回传 code，价格由后端按 SKU 规则计算
+        maxLength: 64
+        type: string
       need_familiar:
         type: boolean
+      patient_name:
+        maxLength: 32
+        type: string
       pet_count:
         maximum: 10
         minimum: 0
@@ -146,6 +156,11 @@ definitions:
       service_date:
         description: "2006-01-02"
         type: string
+      service_items:
+        items:
+          type: string
+        maxItems: 20
+        type: array
       service_type:
         enum:
         - garbage
@@ -433,7 +448,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 写入报价单并把订单金额改为报价额；用户已确认后不可再改
+      description: 仅用于金额为 0 的历史待报价订单；新陪诊订单已按所选服务项自动计价，调用返回 2003
       parameters:
       - description: 订单号
         in: path
@@ -455,7 +470,7 @@ paths:
             $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
       security:
       - AdminToken: []
-      summary: 陪诊报价
+      summary: 历史陪诊报价（兼容旧订单）
       tags:
       - 运营后台
   /api/admin/orders/{orderNo}/redeem:
@@ -721,7 +736,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 预占时段并返回支付参数；陪诊订单金额为 0，等运营报价
+      description: 预占时段并返回支付参数；陪诊按后台配置的服务项单价自动求和，直接支付
       parameters:
       - description: 订单参数
         in: body
@@ -859,7 +874,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 订单关闭并释放时段
+      description: 仅用于历史待报价订单；订单关闭并释放时段
       parameters:
       - description: 订单号
         in: path
@@ -880,7 +895,7 @@ paths:
             $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
       security:
       - UserID: []
-      summary: 拒绝陪诊报价
+      summary: 拒绝历史陪诊报价（兼容旧订单）
       tags:
       - 订单
   /api/v1/orders/{orderNo}/records:
@@ -1129,6 +1144,21 @@ paths:
       summary: 可接单池
       tags:
       - 服务方
+  /api/v1/services/accompany/options:
+    get:
+      description: 返回后台配置的医院列表与可多选的陪诊服务项（含单价，单位分）；价格仅供展示，下单金额由后端按同一配置计算
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data 为 pricing.AccompanyOptions
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 陪诊服务选项
+      tags:
+      - 服务配置
   /callback/sandbox/pay:
     post:
       consumes:

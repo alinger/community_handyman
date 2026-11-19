@@ -264,7 +264,7 @@ const docTemplate = `{
                         "AdminToken": []
                     }
                 ],
-                "description": "写入报价单并把订单金额改为报价额；用户已确认后不可再改",
+                "description": "仅用于金额为 0 的历史待报价订单；新陪诊订单已按所选服务项自动计价，调用返回 2003",
                 "consumes": [
                     "application/json"
                 ],
@@ -274,7 +274,7 @@ const docTemplate = `{
                 "tags": [
                     "运营后台"
                 ],
-                "summary": "陪诊报价",
+                "summary": "历史陪诊报价（兼容旧订单）",
                 "parameters": [
                     {
                         "type": "string",
@@ -728,7 +728,7 @@ const docTemplate = `{
                         "UserID": []
                     }
                 ],
-                "description": "预占时段并返回支付参数；陪诊订单金额为 0，等运营报价",
+                "description": "预占时段并返回支付参数；陪诊按后台配置的服务项单价自动求和，直接支付",
                 "consumes": [
                     "application/json"
                 ],
@@ -991,7 +991,7 @@ const docTemplate = `{
                         "UserID": []
                     }
                 ],
-                "description": "订单关闭并释放时段",
+                "description": "仅用于历史待报价订单；订单关闭并释放时段",
                 "consumes": [
                     "application/json"
                 ],
@@ -1001,7 +1001,7 @@ const docTemplate = `{
                 "tags": [
                     "订单"
                 ],
-                "summary": "拒绝陪诊报价",
+                "summary": "拒绝历史陪诊报价（兼容旧订单）",
                 "parameters": [
                     {
                         "type": "string",
@@ -1383,6 +1383,31 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/services/accompany/options": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "返回后台配置的医院列表与可多选的陪诊服务项（含单价，单位分）；价格仅供展示，下单金额由后端按同一配置计算",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务配置"
+                ],
+                "summary": "陪诊服务选项",
+                "responses": {
+                    "200": {
+                        "description": "data 为 pricing.AccompanyOptions",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/callback/sandbox/pay": {
             "post": {
                 "description": "仅 sandbox 渠道启用。报文：order_no、transaction_id、amount、sign（HMAC-SHA256）",
@@ -1515,6 +1540,10 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 64
                 },
+                "contact_name": {
+                    "type": "string",
+                    "maxLength": 32
+                },
                 "contact_phone": {
                     "type": "string",
                     "maxLength": 20
@@ -1604,8 +1633,17 @@ const docTemplate = `{
                         "recyclable"
                     ]
                 },
+                "hospital": {
+                    "description": "陪诊专用：医院与服务项只回传 code，价格由后端按 SKU 规则计算",
+                    "type": "string",
+                    "maxLength": 64
+                },
                 "need_familiar": {
                     "type": "boolean"
+                },
+                "patient_name": {
+                    "type": "string",
+                    "maxLength": 32
                 },
                 "pet_count": {
                     "type": "integer",
@@ -1631,6 +1669,13 @@ const docTemplate = `{
                 "service_date": {
                     "description": "2006-01-02",
                     "type": "string"
+                },
+                "service_items": {
+                    "type": "array",
+                    "maxItems": 20,
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "service_type": {
                     "type": "string",

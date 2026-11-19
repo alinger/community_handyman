@@ -182,6 +182,9 @@ async function onAdvance(o: Order, node: string) {
       <view v-if="o.address" class="addr">
         {{ o.address.community }} {{ o.address.lane }} {{ o.address.house_no }}
       </view>
+      <view v-if="o.address && (o.address.contact_name || o.address.contact_phone)" class="contact">
+        联系人：{{ o.address.contact_name }} {{ o.address.contact_phone }}
+      </view>
       <view v-if="o.remark" class="remark">备注：{{ o.remark }}</view>
 
       <view v-if="actions(o).length" class="actions">
@@ -330,6 +333,12 @@ async function onAdvance(o: Order, node: string) {
   margin-top: 8rpx;
   font-size: 25rpx;
   color: var(--text);
+}
+
+.contact {
+  margin-top: 6rpx;
+  font-size: 24rpx;
+  color: var(--brand-dark);
 }
 
 .remark {

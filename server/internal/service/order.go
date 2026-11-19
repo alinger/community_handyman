@@ -39,6 +39,26 @@ func NewOrderService(db *gorm.DB, orders *repository.OrderRepo, slots *repositor
 		addresses: addresses, areas: areas, quotes: quotes, pay: pay}
 }
 
+// AccompanyOptions 返回陪诊可选项（医院与可勾选服务项及单价）。
+// 数据来自 service_skus.rules，后台用 PUT /api/admin/skus/{id} 改，用户端只读。
+func (s *OrderService) AccompanyOptions(ctx context.Context) (pricing.AccompanyOptions, error) {
+	sku, err := s.skus.Get(ctx, model.ServiceAccompany, model.PlanSingle)
+	if err != nil {
+		return pricing.AccompanyOptions{}, errs.Wrap(errs.CodeInternal, err)
+	}
+	if sku == nil {
+		return pricing.AccompanyOptions{}, errs.BizMsg(errs.CodeNotFound, "陪诊服务未配置")
+	}
+	opts, err := pricing.ParseAccompanyOptions(json.RawMessage(sku.Rules))
+	if err != nil {
+		return pricing.AccompanyOptions{}, errs.Wrap(errs.CodeInternal, err)
+	}
+	if len(opts.Hospitals) == 0 || len(opts.ServiceItems) == 0 {
+		return pricing.AccompanyOptions{}, errs.BizMsg(errs.CodeNotFound, "陪诊选项尚未配置，请联系运营在后台设置")
+	}
+	return opts, nil
+}
+
 // Preview 费用试算，不落库、不占库存。前端在提交前展示明细用。
 func (s *OrderService) Preview(ctx context.Context, userID uint64, req dto.PreviewOrderReq) (*dto.PreviewOrderResp, error) {
 	addr, sku, date, err := s.validate(ctx, userID, req)
@@ -54,7 +74,8 @@ func (s *OrderService) Preview(ctx context.Context, userID uint64, req dto.Previ
 }
 
 // Create 创建订单并预占库存，随后发起支付。
-// 返回的 pay 为 nil 表示无需立即支付（陪诊需人工报价）。
+// 陪诊自 000006 起按服务项自动计价，与其它服务一样下单即支付；
+// res.ManualQuote 恒为 false，下面的分支仅作为历史兜底保留。
 func (s *OrderService) Create(ctx context.Context, userID uint64, req dto.CreateOrderReq) (*model.Order, *payment.PrepayResult, error) {
 	addr, sku, date, err := s.validate(ctx, userID, req)
 	if err != nil {
@@ -78,6 +99,22 @@ func (s *OrderService) Create(ctx context.Context, userID uint64, req dto.Create
 	addrSnapshot, _ := json.Marshal(ToAddressResp(addr))
 	pricingSnapshot, _ := json.Marshal(dto.PreviewOrderResp{Total: res.Total, Items: toPriceItems(res.Items), ManualQuote: res.ManualQuote})
 
+	// 陪诊把用户所选服务项的 code 单独留档：后台改价后仍可还原当时选了什么；
+	// 医院存名称而不是 code，详情页直接可读，也避免后台改名后旧订单显示不出内容
+	var serviceItems model.JSON
+	hospitalName := req.Hospital
+	if req.ServiceType == string(model.ServiceAccompany) {
+		serviceItems, _ = json.Marshal(req.ServiceItems)
+		if opts, perr := pricing.ParseAccompanyOptions(json.RawMessage(sku.Rules)); perr == nil {
+			for _, h := range opts.Hospitals {
+				if h.Code == req.Hospital {
+					hospitalName = h.Name
+					break
+				}
+			}
+		}
+	}
+
 	order := &model.Order{
 		OrderNo:         generateOrderNo(),
 		UserID:          userID,
@@ -92,6 +129,9 @@ func (s *OrderService) Create(ctx context.Context, userID uint64, req dto.Create
 		DurationMin:     req.DurationMin,
 		DistanceKm:      nilIfZero(req.DistanceKm),
 		GarbageType:     req.GarbageType,
+		Hospital:        hospitalName,
+		PatientName:     req.PatientName,
+		ServiceItems:    serviceItems,
 		Remark:          req.Remark,
 		PricingSnapshot: pricingSnapshot,
 		TotalAmount:     res.Total,
@@ -152,7 +192,7 @@ func (s *OrderService) Repay(ctx context.Context, userID uint64, orderNo string)
 		return nil, errs.Biz(errs.CodePayTimeout)
 	}
 	if o.TotalAmount <= 0 {
-		return nil, errs.BizMsg(errs.CodeIllegalStatus, "该订单需等待人工报价")
+		return nil, errs.BizMsg(errs.CodeIllegalStatus, "订单金额异常，请联系客服")
 	}
 
 	pr, err := s.pay.Prepay(ctx, payment.PrepayRequest{
@@ -423,6 +463,9 @@ func (s *OrderService) calc(ctx context.Context, userID uint64, _ *model.Address
 		FeedOnly:       req.FeedOnly,
 		NeedFamiliar:   req.NeedFamiliar,
 		FamiliarOrders: familiarOrders,
+		Hospital:       req.Hospital,
+		PatientName:    req.PatientName,
+		ServiceItems:   req.ServiceItems,
 		ServiceDate:    date.Time(),
 		Rules:          json.RawMessage(sku.Rules),
 	})
@@ -461,7 +504,14 @@ func (s *OrderService) ToOrderResp(o *model.Order, events []model.OrderEvent) dt
 		var p dto.PreviewOrderResp
 		if err := json.Unmarshal(o.PricingSnapshot, &p); err == nil {
 			resp.PriceItems = p.Items
+			if o.ServiceType == model.ServiceAccompany {
+				resp.AccompanyItems = p.Items
+			}
 		}
+	}
+	if o.ServiceType == model.ServiceAccompany {
+		resp.Hospital = o.Hospital
+		resp.PatientName = o.PatientName
 	}
 	if o.Status == model.OrderPendingPayment {
 		expire := o.CreatedAt.Add(PayTimeout)

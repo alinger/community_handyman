@@ -32,6 +32,13 @@ const slotText = computed(() => {
   return SLOTS.find((s) => s.code === code)?.label || code
 })
 
+/** 服务地址上的联系人与联系方式 */
+const addressContact = computed(() => {
+  const a = order.value?.address
+  if (!a) return ''
+  return [a.contact_name, a.contact_phone].filter(Boolean).join(' · ')
+})
+
 /** 状态区文案 */
 const statusHint = computed(() => {
   const o = order.value
@@ -342,6 +349,24 @@ const cancellable = computed(() => {
           <text class="info-label">服务地址</text>
           <text class="info-value">
             {{ order.address.community }} {{ order.address.lane }} {{ order.address.house_no }}
+          </text>
+        </view>
+        <view v-if="addressContact" class="info-row">
+          <text class="info-label">联系人</text>
+          <text class="info-value">{{ addressContact }}</text>
+        </view>
+        <view v-if="order.hospital" class="info-row">
+          <text class="info-label">就诊医院</text>
+          <text class="info-value">{{ order.hospital }}</text>
+        </view>
+        <view v-if="order.patient_name" class="info-row">
+          <text class="info-label">就诊人</text>
+          <text class="info-value">{{ order.patient_name }}</text>
+        </view>
+        <view v-if="order.accompany_items?.length" class="info-row">
+          <text class="info-label">陪诊服务</text>
+          <text class="info-value">
+            {{ order.accompany_items.map((it) => it.name).join('、') }}
           </text>
         </view>
         <view v-if="order.remark" class="info-row">

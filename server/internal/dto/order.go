@@ -17,6 +17,11 @@ type CreateOrderReq struct {
 	Remark       string  `json:"remark" binding:"max=200"`
 	FeedOnly     bool    `json:"feed_only"`
 	NeedFamiliar bool    `json:"need_familiar"`
+
+	// 陪诊专用：医院与服务项只回传 code，价格由后端按 SKU 规则计算
+	Hospital     string   `json:"hospital" binding:"omitempty,max=64"`
+	PatientName  string   `json:"patient_name" binding:"omitempty,max=32"`
+	ServiceItems []string `json:"service_items" binding:"omitempty,max=20,dive,max=32"`
 }
 
 // PreviewOrderReq 费用试算，字段与下单一致，但不产生订单。
@@ -55,6 +60,11 @@ type OrderResp struct {
 	PriceItems   []PriceItem  `json:"price_items,omitempty"`
 	PayExpiresAt *time.Time   `json:"pay_expires_at,omitempty"`
 	Quote        *QuoteResp   `json:"quote,omitempty"`
+
+	// 陪诊订单已选内容，供详情页与后台还原
+	Hospital       string      `json:"hospital,omitempty"`
+	PatientName    string      `json:"patient_name,omitempty"`
+	AccompanyItems []PriceItem `json:"accompany_items,omitempty"`
 }
 
 // QuoteResp 陪诊报价。Confirmed 为真表示用户已确认并去支付。

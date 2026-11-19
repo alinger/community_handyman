@@ -137,6 +137,23 @@ func (a *API) CheckArea(c *gin.Context) {
 	})
 }
 
+// AccompanyOptions 陪诊可选项（医院与可勾选服务项及单价）。
+// @Summary      陪诊服务选项
+// @Description  返回后台配置的医院列表与可多选的陪诊服务项（含单价，单位分）；价格仅供展示，下单金额由后端按同一配置计算
+// @Tags         服务配置
+// @Produce      json
+// @Success      200  {object}  response.Body  "data 为 pricing.AccompanyOptions"
+// @Security     UserID
+// @Router       /api/v1/services/accompany/options [get]
+func (a *API) AccompanyOptions(c *gin.Context) {
+	opts, err := a.Order.AccompanyOptions(c.Request.Context())
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, opts)
+}
+
 // ---------- 订单 ----------
 
 // PreviewOrder 费用试算。
@@ -164,7 +181,7 @@ func (a *API) PreviewOrder(c *gin.Context) {
 
 // CreateOrder 下单并返回支付参数。
 // @Summary      创建订单
-// @Description  预占时段并返回支付参数；陪诊订单金额为 0，等运营报价
+// @Description  预占时段并返回支付参数；陪诊按后台配置的服务项单价自动求和，直接支付
 // @Tags         订单
 // @Accept       json
 // @Produce      json
@@ -192,8 +209,8 @@ func (a *API) CreateOrder(c *gin.Context) {
 	if pay != nil {
 		resp.Pay = pay
 	} else {
-		resp.ManualQuote = true
-		resp.PayHint = "陪诊服务需人工报价，运营确认后再支付"
+		// 正常流程所有服务都会返回支付参数；这里只留兜底，不再有人工报价
+		resp.PayHint = "请在订单详情页完成支付"
 	}
 	response.Created(c, resp)
 }

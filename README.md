@@ -11,10 +11,21 @@ server/              服务端（Go + Gin + GORM + MySQL）
 ├── internal/        业务代码（分层见 server/README.md）
 ├── migrations/      golang-migrate SQL
 └── configs/         配置文件
-docs/                产品与工程文档
+miniapp/             用户端小程序（uni-app + Vue3 + TypeScript）
+├── src/pages       首页、预约、订单列表、订单详情、我的
+├── src/api         接口封装（与 swagger.json 对齐）
+├── src/store       Pinia 状态
+└── src/utils       请求层与格式化
+docs/                产品文档、设计稿与页面截图
 ```
 
-> 小程序端与运营后台前端尚未开工，接口已就绪。
+> 运营后台前端尚未开工，后台接口已就绪。
+
+## 页面
+
+| 首页 | 预约 | 订单详情 |
+|---|---|---|
+| ![](docs/screenshots/01-首页.jpg) | ![](docs/screenshots/02-预约表单.jpg) | ![](docs/screenshots/04-订单详情.jpg) |
 
 ## 快速开始
 
@@ -37,6 +48,18 @@ curl http://127.0.0.1:8080/healthz
 
 生产环境用 pm2 托管，见 `server/deployments/`。
 
+### 用户端小程序
+
+```bash
+cd miniapp
+npm install
+npm run dev:h5          # 浏览器预览（http://localhost:5173，API 走 vite proxy）
+npm run dev:mp-weixin   # 产出 dist/dev/mp-weixin，用微信开发者工具打开
+npm run build:mp-weixin # 生产构建
+```
+
+开发期不接微信登录，启动时用固定 openid 调 `/api/v1/dev/login` 自动建号；支付走沙箱 `mock-pay` 接口。接入商户号后替换 `src/store/user.ts` 的 `ensureLogin` 与 `startPay` 即可，页面不用改。
+
 接口文档：服务启动后访问 `/swagger/index.html`（生产环境自动关闭）。改动注解后执行 `make doc` 重新生成。
 
 ## 技术栈
@@ -58,6 +81,6 @@ curl http://127.0.0.1:8080/healthz
 
 ## 当前进度
 
-已完成：下单支付闭环、履约（接单/节点/服务记录）、运营后台接口、包月与陪诊报价。
+已完成：下单支付闭环、履约（接单/节点/服务记录）、运营后台接口、包月与陪诊报价、用户端小程序五个页面。
 
-待办：小程序与后台前端、微信登录与真实支付（需商户资质）、AC 全量回归。
+待办：运营后台前端、服务方端页面、微信登录与真实支付（需商户资质）、AC 全量回归。

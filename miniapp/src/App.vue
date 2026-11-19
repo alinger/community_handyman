@@ -2,14 +2,38 @@
 import { onLaunch } from '@dcloudio/uni-app'
 import { useUserStore } from '@/store/user'
 
+/** 免登录页面：登录/注册页与静态文档页，未登录也要能直接打开 */
+const PUBLIC_PAGES = ['pages/auth/login', 'pages/auth/register', 'pages/doc/index']
+
 onLaunch(async () => {
   const user = useUserStore()
+
+  // onLaunch 阶段 getCurrentPages() 可能还是空数组，取启动参数里的 path 更可靠
+  const launchPath = (uni.getLaunchOptionsSync()?.path || '').replace(/^\//, '')
+  const isPublic = PUBLIC_PAGES.some((p) => launchPath.startsWith(p))
+
+  // 已有 token：恢复欢迎页所需的地址数据后按角色分流
+  if (user.isLoggedIn) {
+    try {
+      await user.loadAddresses()
+      if (user.role === 'provider' && !isPublic) {
+        uni.reLaunch({ url: '/pages/provider/tasks' })
+      }
+    } catch (e) {
+      console.warn('[app] 恢复会话失败', e)
+    }
+    return
+  }
+
+  // 未登录：先给开发环境一次机会（H5 ?as= 参数会走 dev 登录）
   try {
     await user.ensureLogin()
     await user.loadAddresses()
   } catch (e) {
-    // 启动阶段静默失败，进入具体页面时会再次尝试并给出提示
-    console.warn('[app] 初始化用户失败', e)
+    // 打开的是公开页就不打断用户；否则回登录页
+    if (!isPublic) {
+      uni.reLaunch({ url: '/pages/auth/login' })
+    }
   }
 })
 </script>

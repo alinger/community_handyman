@@ -120,3 +120,23 @@ type MeResp struct {
 	Phone    string `json:"phone"`
 	Role     string `json:"role"`
 }
+
+// RegisterReq 用户端手机号注册。
+// 密码长度下界交给 service 校验，以输出中文提示（binding 的 min 报错是英文原文，不适合直接给用户看）。
+type RegisterReq struct {
+	Phone    string `json:"phone" binding:"required,max=20" example:"13800138000"`
+	Password string `json:"password" binding:"required,max=32" example:"123456"`
+	Nickname string `json:"nickname" binding:"max=32" example:"张阿姨"`
+}
+
+// UserLoginReq 用户端手机号登录。
+type UserLoginReq struct {
+	Phone    string `json:"phone" binding:"required,max=20" example:"13800138000"`
+	Password string `json:"password" binding:"required,max=32" example:"123456"`
+}
+
+// ChangePasswordReq 用户端修改密码。
+type ChangePasswordReq struct {
+	OldPassword string `json:"old_password" binding:"required,max=32"`
+	NewPassword string `json:"new_password" binding:"required,max=32"`
+}

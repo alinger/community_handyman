@@ -22,6 +22,7 @@ type API struct {
 	Order    *service.OrderService
 	Payment  *service.PaymentService
 	User     *service.UserService
+	Auth     *service.AuthService
 	Record   *service.RecordService
 	Provider *service.ProviderService
 	Admin    *service.AdminService
@@ -39,6 +40,7 @@ type Deps struct {
 	Order    *service.OrderService
 	Payment  *service.PaymentService
 	User     *service.UserService
+	Auth     *service.AuthService
 	Record   *service.RecordService
 	Provider *service.ProviderService
 	Admin    *service.AdminService
@@ -52,7 +54,7 @@ type Deps struct {
 // New 构造 handler 集合。
 func New(d Deps) *API {
 	return &API{
-		Address: d.Address, Order: d.Order, Payment: d.Payment, User: d.User,
+		Address: d.Address, Order: d.Order, Payment: d.Payment, User: d.User, Auth: d.Auth,
 		Record: d.Record, Provider: d.Provider, Admin: d.Admin, Refund: d.Refund,
 		Quote: d.Quote, Monthly: d.Monthly,
 		Env: d.Env, TokenTTL: d.TokenTTL,
@@ -533,7 +535,20 @@ func (a *API) DevLogin(c *gin.Context) {
 		}
 		u.Role = req.Role
 	}
-	response.OK(c, gin.H{"user_id": u.ID, "openid": u.OpenID, "nickname": u.Nickname, "role": u.Role})
+	// 与正式登录返回同一套结构，前端两条路径共用一份会话处理逻辑
+	s, err := a.Auth.SessionFor(u)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{
+		"user_id":    u.ID,
+		"openid":     u.OpenID,
+		"nickname":   u.Nickname,
+		"role":       u.Role,
+		"token":      s.Token,
+		"expires_in": s.ExpiresIn,
+	})
 }
 
 // DevMockPay 模拟支付成功，仅 dev 环境注册该路由。

@@ -49,6 +49,27 @@ func (r *UserRepo) ListByIDs(ctx context.Context, ids []uint64) ([]model.User, e
 	return us, nil
 }
 
+// GetByPhone 按手机号取用户。空手机号直接返回 nil，避免命中历史空值记录。
+func (r *UserRepo) GetByPhone(ctx context.Context, phone string) (*model.User, error) {
+	if phone == "" {
+		return nil, nil
+	}
+	var u model.User
+	if err := r.db.WithContext(ctx).Where("phone = ?", phone).First(&u).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
+// SetPassword 设置登录密码哈希（注册时调用）。
+func (r *UserRepo) SetPassword(ctx context.Context, userID uint64, hash string) error {
+	return r.db.WithContext(ctx).Model(&model.User{}).
+		Where("id = ?", userID).Update("password_hash", hash).Error
+}
+
 func (r *UserRepo) Create(ctx context.Context, u *model.User) error {
 	return r.db.WithContext(ctx).Create(u).Error
 }

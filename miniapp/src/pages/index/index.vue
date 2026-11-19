@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import TabBar from '@/components/TabBar.vue'
 import { useUserStore } from '@/store/user'
+import { ensureAuth } from '@/utils/auth'
 import { SLOTS } from '@/utils/format'
 
 const user = useUserStore()
@@ -33,6 +34,7 @@ onMounted(() => {
 })
 
 onShow(async () => {
+  if (!ensureAuth()) return
   try {
     await user.ensureLogin()
     if (user.role === 'provider') {

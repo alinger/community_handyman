@@ -4,6 +4,7 @@ import { onReachBottom, onShow } from '@dcloudio/uni-app'
 import TabBar from '@/components/TabBar.vue'
 import { acceptOrder, providerOpenOrders, type Order } from '@/api'
 import { useUserStore } from '@/store/user'
+import { ensureAuth } from '@/utils/auth'
 import { friendlyDate, price, SERVICE_LABEL, SLOTS } from '@/utils/format'
 import { ApiError } from '@/utils/request'
 
@@ -16,6 +17,7 @@ const page = ref(1)
 const actingNo = ref('') // 正在抢单的订单号，按钮转圈用
 
 onShow(async () => {
+  if (!ensureAuth()) return
   await user.ensureLogin()
   if (user.role !== 'provider') return
   reload()

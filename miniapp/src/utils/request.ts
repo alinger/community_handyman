@@ -46,6 +46,7 @@ export const BASE_URL =
   (import.meta.env.VITE_API_BASE as string) || (isH5 ? '' : 'http://127.0.0.1:8080')
 
 const KEY_USER_ID = 'ch_user_id'
+const KEY_TOKEN = 'ch_token'
 
 export function getUserId(): string {
   return (uni.getStorageSync(KEY_USER_ID) as string) || ''
@@ -57,6 +58,39 @@ export function setUserId(id: string | number) {
 
 export function clearUserId() {
   uni.removeStorageSync(KEY_USER_ID)
+}
+
+/** 登录 token。存在时请求优先用 Bearer，X-User-Id 只作开发联调兜底 */
+export function getToken(): string {
+  return (uni.getStorageSync(KEY_TOKEN) as string) || ''
+}
+
+export function setToken(token: string) {
+  if (!token) uni.removeStorageSync(KEY_TOKEN)
+  else uni.setStorageSync(KEY_TOKEN, token)
+}
+
+export function clearToken() {
+  uni.removeStorageSync(KEY_TOKEN)
+}
+
+/** 登录态失效（1002 / HTTP 401）时统一清理并跳登录页 */
+let redirectingToLogin = false
+
+export function handleUnauthorized() {
+  clearToken()
+  clearUserId()
+  if (redirectingToLogin) return
+  redirectingToLogin = true
+  uni.showToast({ title: '登录已失效，请重新登录', icon: 'none' })
+  setTimeout(() => {
+    uni.reLaunch({
+      url: '/pages/auth/login',
+      complete: () => {
+        redirectingToLogin = false
+      },
+    })
+  }, 600)
 }
 
 interface RequestOptions {
@@ -79,8 +113,14 @@ export function request<T>(opts: RequestOptions): Promise<T> {
   const header: Record<string, string> = { 'Content-Type': 'application/json' }
 
   if (auth) {
-    const uid = getUserId()
-    if (uid) header['X-User-Id'] = uid
+    const token = getToken()
+    if (token) {
+      header['Authorization'] = `Bearer ${token}`
+    } else {
+      // 没有 token 时用 X-User-Id 走联调通道（后端仅非生产环境接受）
+      const uid = getUserId()
+      if (uid) header['X-User-Id'] = uid
+    }
   }
 
   if (loading) uni.showLoading({ title: '加载中', mask: true })
@@ -99,6 +139,12 @@ export function request<T>(opts: RequestOptions): Promise<T> {
         // 非 2xx 且没有统一结构，视为网关/服务异常
         if (!body || typeof body.code !== 'number') {
           reject(new ApiError(res.statusCode || 0, `服务异常（HTTP ${res.statusCode}）`))
+          return
+        }
+        if (body.code === 1002 || res.statusCode === 401) {
+          // 登录态失效：清本地凭证并回登录页，避免用户停在空白页反复重试
+          if (auth) handleUnauthorized()
+          reject(new ApiError(body.code || 1002, body.message || '登录已失效'))
           return
         }
         if (body.code !== 0) {
@@ -122,16 +168,27 @@ export function request<T>(opts: RequestOptions): Promise<T> {
  * 单独封装而不复用 request，因为 uni.uploadFile 的入参结构不同。
  */
 export function upload(url: string, filePath: string, formData: Record<string, string>): Promise<ApiBody> {
+  const token = getToken()
   const uid = getUserId()
+  const authHeader: Record<string, string> = token
+    ? { Authorization: `Bearer ${token}` }
+    : uid
+      ? { 'X-User-Id': uid }
+      : {}
   return new Promise((resolve, reject) => {
     uni.uploadFile({
       url: BASE_URL + url,
       filePath,
       name: 'file',
       formData,
-      header: uid ? { 'X-User-Id': uid } : {},
+      header: authHeader,
       success: (res) => {
         const body = JSON.parse(res.data) as ApiBody
+        if (body.code === 1002) {
+          handleUnauthorized()
+          reject(new ApiError(body.code, body.message || '登录已失效'))
+          return
+        }
         if (body.code !== 0) {
           reject(new ApiError(body.code, body.message))
           return

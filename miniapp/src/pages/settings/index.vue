@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
+import { changePassword } from '@/api'
 import { useUserStore } from '@/store/user'
+import { ensureAuth } from '@/utils/auth'
 import { ApiError } from '@/utils/request'
 
 const user = useUserStore()
@@ -13,7 +15,49 @@ const form = reactive({
   phone: '',
 })
 
+// 修改密码弹层
+const pwdVisible = ref(false)
+const pwdSaving = ref(false)
+const pwdForm = reactive({ oldPwd: '', newPwd: '', confirm: '' })
+const pwdErr = ref('')
+
+function openPwd() {
+  pwdForm.oldPwd = ''
+  pwdForm.newPwd = ''
+  pwdForm.confirm = ''
+  pwdErr.value = ''
+  pwdVisible.value = true
+}
+
+async function onSavePwd() {
+  if (pwdSaving.value) return
+  pwdErr.value = ''
+  if (!pwdForm.oldPwd) {
+    pwdErr.value = '请输入原密码'
+    return
+  }
+  if (pwdForm.newPwd.length < 6) {
+    pwdErr.value = '新密码至少 6 位'
+    return
+  }
+  if (pwdForm.newPwd !== pwdForm.confirm) {
+    pwdErr.value = '两次输入的新密码不一致'
+    return
+  }
+  pwdSaving.value = true
+  try {
+    await changePassword({ old_password: pwdForm.oldPwd, new_password: pwdForm.newPwd })
+    pwdVisible.value = false
+    uni.showToast({ title: '密码已修改', icon: 'success' })
+  } catch (e) {
+    pwdErr.value = e instanceof ApiError ? e.message : '请稍后重试'
+  } finally {
+    pwdSaving.value = false
+  }
+}
+
 onShow(async () => {
+  if (!ensureAuth()) return
   try {
     await user.ensureLogin()
     await user.loadProfile()
@@ -64,8 +108,8 @@ function onLogout() {
       if (!r.confirm) return
       user.logout()
       uni.showToast({ title: '已退出', icon: 'none' })
-      // 重新进入首页：dev 环境会自动重新联调登录，生产环境重新走微信登录
-      setTimeout(() => uni.reLaunch({ url: '/pages/index/index' }), 500)
+      // 退出后回登录页，不能回首页（首页需要登录态）
+      setTimeout(() => uni.reLaunch({ url: '/pages/auth/login' }), 500)
     },
   })
 }
@@ -110,9 +154,39 @@ function onLogout() {
     </view>
 
     <view class="card section">
-      <view class="section-title">账号</view>
+      <view class="section-title">账号安全</view>
+      <view class="menu-item" @tap="openPwd">
+        <text>修改密码</text>
+        <text class="chev">›</text>
+      </view>
       <view class="logout-btn" @tap="onLogout">退出登录</view>
       <view class="form-tip center">退出后将清除本机登录状态</view>
+    </view>
+
+    <!-- 修改密码弹层 -->
+    <view v-if="pwdVisible" class="mask" @tap="pwdVisible = false">
+      <view class="sheet" @tap.stop>
+        <view class="sheet-title">修改密码</view>
+        <view class="form-item">
+          <text class="form-label">原密码</text>
+          <input v-model="pwdForm.oldPwd" class="form-input" password maxlength="32" placeholder="请输入原密码" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">新密码</text>
+          <input v-model="pwdForm.newPwd" class="form-input" password maxlength="32" placeholder="至少 6 位" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">确认新密码</text>
+          <input v-model="pwdForm.confirm" class="form-input" password maxlength="32" placeholder="再输入一次" />
+        </view>
+        <view v-if="pwdErr" class="pwd-err">{{ pwdErr }}</view>
+        <view class="sheet-actions">
+          <view class="btn-ghost half" @tap="pwdVisible = false">取消</view>
+          <view class="btn-primary half" :class="{ 'is-disabled': pwdSaving }" @tap="onSavePwd">
+            {{ pwdSaving ? '提交中…' : '确认修改' }}
+          </view>
+        </view>
+      </view>
     </view>
   </view>
 </template>
@@ -203,9 +277,63 @@ function onLogout() {
   padding: 22rpx 0;
   font-size: 28rpx;
   font-weight: 500;
+  margin-top: 12rpx;
 }
 
 .logout-btn:active {
   opacity: 0.8;
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 26rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+  font-size: 28rpx;
+}
+
+.chev {
+  color: var(--text-light);
+}
+
+.pwd-err {
+  color: var(--danger);
+  font-size: 23rpx;
+  margin-top: 14rpx;
+}
+
+.mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 300;
+  display: flex;
+  align-items: flex-end;
+}
+
+.sheet {
+  width: 100%;
+  background: #fff;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 40rpx 32rpx;
+  padding-bottom: calc(40rpx + env(safe-area-inset-bottom));
+}
+
+.sheet-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 20rpx;
+}
+
+.sheet-actions {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 36rpx;
+}
+
+.half {
+  flex: 1;
 }
 </style>

@@ -1,6 +1,19 @@
 {
   "pages": [
     {
+      "path": "pages/auth/login",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "登录"
+      }
+    },
+    {
+      "path": "pages/auth/register",
+      "style": {
+        "navigationBarTitleText": "注册"
+      }
+    },
+    {
       "path": "pages/index/index",
       "style": {
         "navigationStyle": "custom",

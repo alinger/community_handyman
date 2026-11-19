@@ -3,6 +3,7 @@ import { reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { checkArea, createAddress, listCommunities, updateAddress } from '@/api'
 import { useUserStore } from '@/store/user'
+import { ensureAuth } from '@/utils/auth'
 import { ApiError } from '@/utils/request'
 
 const user = useUserStore()
@@ -23,6 +24,7 @@ const form = reactive({
 })
 
 onShow(async () => {
+  if (!ensureAuth()) return
   try {
     await user.ensureLogin()
     await Promise.all([user.loadAddresses(), loadCommunities()])

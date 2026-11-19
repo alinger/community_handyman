@@ -15,6 +15,7 @@ const (
 	CodeUnauthorized     = 1002
 	CodeForbidden        = 1003
 	CodeNotFound         = 1004
+	CodePhoneTaken       = 1005
 	CodeAddressOutOfArea = 2001
 	CodeSlotFull         = 2002
 	CodeIllegalStatus    = 2003
@@ -30,6 +31,7 @@ var messages = map[int]string{
 	CodeUnauthorized:     "未登录或登录已失效",
 	CodeForbidden:        "无权限执行该操作",
 	CodeNotFound:         "资源不存在",
+	CodePhoneTaken:       "该手机号已注册，请直接登录",
 	CodeAddressOutOfArea: "该地址暂未开通服务",
 	CodeSlotFull:         "该时段已约满，请选择其他时段",
 	CodeIllegalStatus:    "当前订单状态不允许此操作",

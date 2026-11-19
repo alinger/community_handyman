@@ -2,10 +2,12 @@
 import { onShow } from '@dcloudio/uni-app'
 import TabBar from '@/components/TabBar.vue'
 import { useUserStore } from '@/store/user'
+import { ensureAuth } from '@/utils/auth'
 
 const user = useUserStore()
 
 onShow(async () => {
+  if (!ensureAuth()) return
   try {
     await user.ensureLogin()
     await Promise.all([user.loadAddresses(), user.loadProfile()])
@@ -42,7 +44,7 @@ function goDoc(type: 'terms' | 'privacy' | 'about') {
 
 /**
  * 开发环境切换演示身份（住户 ↔ 服务方）。
- * 生产环境身份由微信登录决定，这个入口不会渲染。
+ * 依赖后端 /dev/login，只在 dev 环境注册；线上点会失败并给出提示。
  */
 async function onSwitchRole(role: 'user' | 'provider') {
   if (user.role === role) {
@@ -52,11 +54,9 @@ async function onSwitchRole(role: 'user' | 'provider') {
   try {
     await user.switchRole(role)
   } catch (e) {
-    // 切换依赖后端的 /dev/login，该路由只在 dev 注册，
-    // 生产环境点到这里会失败，给一句人话而不是抛异常
     uni.showModal({
       title: '无法切换',
-      content: '身份切换仅演示环境可用，正式环境由微信登录决定身份',
+      content: '演示身份切换仅开发环境可用',
       showCancel: false,
     })
   }

@@ -10,6 +10,7 @@ import {
   type Order,
 } from '@/api'
 import { useUserStore } from '@/store/user'
+import { ensureAuth } from '@/utils/auth'
 import { friendlyDate, price, SERVICE_LABEL, SLOTS } from '@/utils/format'
 import { ApiError } from '@/utils/request'
 
@@ -30,6 +31,7 @@ const page = ref(1)
 const acting = ref(false)
 
 onShow(async () => {
+  if (!ensureAuth()) return
   await user.ensureLogin()
   // 服务方身份校验：住户误入时弹提示并跳回
   if (user.role !== 'provider') {

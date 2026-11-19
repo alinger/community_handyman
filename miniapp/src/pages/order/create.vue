@@ -18,6 +18,7 @@ import {
   type SlotAvailability,
 } from '@/api'
 import { useUserStore } from '@/store/user'
+import { ensureAuth } from '@/utils/auth'
 import { availableSlots, nextDays, price, SLOTS } from '@/utils/format'
 import { ApiError } from '@/utils/request'
 
@@ -144,6 +145,7 @@ const timeText = computed(() => {
 })
 
 onLoad(async (query) => {
+  if (!ensureAuth()) return
   if (query?.type && ['garbage', 'dogwalk', 'accompany'].includes(query.type)) {
     form.serviceType = query.type as string
   }

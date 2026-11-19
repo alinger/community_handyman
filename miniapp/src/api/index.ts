@@ -148,12 +148,64 @@ export interface CreateOrderPayload {
   service_items?: string[]
 }
 
+/* ---------- 认证 ---------- */
+
+export interface SessionUser {
+  user_id: number
+  nickname: string
+  phone: string
+  role: string
+}
+
+export interface Session {
+  token: string
+  expires_in: number
+  user: SessionUser
+}
+
+/** 手机号注册，成功后直接返回登录态，无需再登录一次 */
+export function register(data: { phone: string; password: string; nickname?: string }) {
+  return request<Session>({
+    url: '/api/v1/auth/register',
+    method: 'POST',
+    data,
+    auth: false,
+    loading: true,
+  })
+}
+
+export function login(data: { phone: string; password: string }) {
+  return request<Session>({
+    url: '/api/v1/auth/login',
+    method: 'POST',
+    data,
+    auth: false,
+    loading: true,
+  })
+}
+
+export function changePassword(data: { old_password: string; new_password: string }) {
+  return request<{ changed: boolean }>({
+    url: '/api/v1/auth/password',
+    method: 'PUT',
+    data,
+    loading: true,
+  })
+}
+
 /**
  * 本地联调登录，仅 dev 环境可用。
  * role 用于把 openid 对应的账号设成服务方，开发期身份切换靠它。
  */
 export function devLogin(openid: string, nickname: string, role?: string) {
-  return request<{ user_id: number; openid: string; nickname: string; role: string }>({
+  return request<{
+    user_id: number
+    openid: string
+    nickname: string
+    role: string
+    token: string
+    expires_in: number
+  }>({
     url: '/api/v1/dev/login',
     method: 'POST',
     data: { openid, nickname, role },

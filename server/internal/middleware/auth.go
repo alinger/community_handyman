@@ -13,32 +13,54 @@ import (
 
 // RequireUser 是用户端鉴权中间件。
 //
-// 当前实现：从 X-User-Id 头取用户，供本地联调与沙箱联调用。
-// 接入微信登录后改为解析 Authorization: Bearer <JWT>，只保留这一处改动，
-// 业务层通过 CurrentUserID 取用户，不感知凭据形式。
-func RequireUser() gin.HandlerFunc {
+// 优先解析 Authorization: Bearer <token>（正式登录态，角色为 user/provider）；
+// 没有 Bearer 时回落到 X-User-Id 头，供本地联调与沙箱脚本直接指定用户，
+// 该 fallback 只在非生产环境生效，避免线上被伪造身份。
+func RequireUser(secret string, allowHeaderFallback bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if raw, err := auth.Bearer(c.GetHeader("Authorization")); err == nil && raw != "" {
+			claims, err := auth.Parse(secret, raw)
+			if err != nil || (claims.Role != auth.RoleUser && claims.Role != auth.RoleProvider) {
+				abortUnauthorized(c)
+				return
+			}
+			c.Set(CtxUserID, claims.Sub)
+			c.Set(CtxUserRole, claims.Role)
+			c.Next()
+			return
+		}
+
+		if !allowHeaderFallback {
+			abortUnauthorized(c)
+			return
+		}
+
 		raw := c.GetHeader("X-User-Id")
 		if raw == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, response.Body{
-				Code:      errs.CodeUnauthorized,
-				Message:   errs.Message(errs.CodeUnauthorized),
-				RequestID: c.GetString(response.CtxRequestID),
-			})
+			abortUnauthorized(c)
 			return
 		}
 		uid, err := strconv.ParseUint(raw, 10, 64)
 		if err != nil || uid == 0 {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, response.Body{
-				Code:      errs.CodeUnauthorized,
-				Message:   errs.Message(errs.CodeUnauthorized),
-				RequestID: c.GetString(response.CtxRequestID),
-			})
+			abortUnauthorized(c)
 			return
 		}
 		c.Set(CtxUserID, uid)
 		c.Next()
 	}
+}
+
+// CtxUserRole 是用户端鉴权写入 context 的角色键。
+const CtxUserRole = "user_role"
+
+// CurrentUserRole 取用户端当前角色（token 中携带；X-User-Id 联调路径为空）。
+func CurrentUserRole(c *gin.Context) string {
+	if v, ok := c.Get(CtxUserRole); ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
 }
 
 // CurrentUserID 从 context 取当前用户。

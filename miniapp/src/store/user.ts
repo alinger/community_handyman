@@ -4,11 +4,21 @@ import {
   devLogin,
   getMe,
   listAddresses,
+  login as apiLogin,
+  register as apiRegister,
   setDefaultAddress as apiSetDefault,
   updateMe,
-  type Address,
+  type Session,
 } from '@/api'
-import { getUserId, setUserId, clearUserId } from '@/utils/request'
+import type { Address } from '@/api'
+import {
+  getToken,
+  getUserId,
+  setToken,
+  setUserId,
+  clearToken,
+  clearUserId,
+} from '@/utils/request'
 
 const KEY_OPENID = 'ch_openid'
 const KEY_ROLE = 'ch_role'
@@ -16,13 +26,17 @@ const KEY_ROLE = 'ch_role'
 /**
  * 用户与地址状态。
  *
- * 当前用 /api/v1/dev/login 按 openid 取用户，仅开发环境可用。
- * 接入微信登录后改成：uni.login 拿 code → 后端 code2session 换 openid 并签发 JWT，
- * 这里只需替换 ensureLogin 的实现，页面不用动。
+ * 登录态：正式流程走手机号 + 密码（/auth/login、/auth/register）拿 token，
+ * 请求层用 Authorization: Bearer 带上。token 与 userId 都落在本地缓存，
+ * 冷启动时 isLoggedIn 直接读缓存判断，不需要先请求一次后端。
+ *
+ * 开发便利：H5 地址栏带 ?as=provider|user 时会自动走 /dev/login 造出对应身份，
+ * 该路由后端只在 dev 注册，生产环境自然失效。
  */
 export const useUserStore = defineStore('user', {
   state: () => ({
     userId: getUserId(),
+    token: getToken(),
     nickname: '',
     phone: '',
     role: (uni.getStorageSync(KEY_ROLE) as string) || 'user',
@@ -33,6 +47,10 @@ export const useUserStore = defineStore('user', {
   }),
 
   getters: {
+    /** 是否已登录：有 token 才算，光有 userId 是历史联调残留 */
+    isLoggedIn(state): boolean {
+      return !!state.token && !!state.userId
+    },
     currentAddress(state): Address | undefined {
       return state.addresses.find((a) => a.id === state.currentAddressId) || state.addresses[0]
     },
@@ -43,48 +61,106 @@ export const useUserStore = defineStore('user', {
 
   actions: {
     /**
-     * 确保已登录，重复调用不会重复请求。
-     * App.onLaunch 与页面 onShow 会并发调用，这里用同一个 Promise 去重，
-     * 页面侧 await 它即可保证拿到登录结果再发业务请求。
+     * 确保已登录。未登录时抛错，由调用页决定跳登录页。
+     * App.onLaunch 与页面 onShow 会并发调用，这里用同一个 Promise 去重。
      */
     async ensureLogin() {
-      if (this.userId) return
+      if (this.isLoggedIn) return
       if (!this.loginPromise) {
-        this.loginPromise = this.doLogin().finally(() => {
+        this.loginPromise = this.restoreSession().finally(() => {
           this.loginPromise = null
         })
       }
       await this.loginPromise
     },
 
-    async doLogin() {
-      if (this.userId) return
-      // 开发期用固定 openid：H5 与开发者工具共用同一账号，
-      // 便于在后台造数据后回到页面直接看到。生产环境这段整体被微信登录替换。
-      let openid = (uni.getStorageSync(KEY_OPENID) as string) || ''
-      if (!openid) {
-        openid = 'mp_dev_user'
-        uni.setStorageSync(KEY_OPENID, openid)
-      }
-      // H5 支持在地址上加 ?as=provider|user 快速切换演示身份。
-      // /dev/login 只在后端 dev 环境注册，生产后端直接 404，此入口天然失效。
+    /**
+     * 恢复会话：只有本地无 token 时才尝试自动登录。
+     * 自动登录仅限开发环境（H5 ?as= 参数或 dev 后端）；
+     * 生产环境无 token 直接抛错，让页面跳登录页。
+     */
+    async restoreSession() {
+      if (this.isLoggedIn) return
       // #ifdef H5
       {
         const as = new URLSearchParams(window.location.search).get('as')
         if (as === 'provider' || as === 'user') {
-          openid = `mp_dev_${as}`
-          uni.setStorageSync(KEY_OPENID, openid)
+          await this.devLoginAs(as === 'provider' ? 'provider' : 'user')
+          return
         }
       }
       // #endif
+      // 有 userId 但没 token：历史联调数据，清掉后按未登录处理
+      if (this.userId && !this.token) {
+        this.userId = ''
+        clearUserId()
+      }
+      if (!this.token) {
+        throw new Error('未登录')
+      }
+    },
+
+    /** 应用正式登录/注册返回的会话 */
+    applySession(s: Session) {
+      this.token = s.token
+      this.userId = String(s.user.user_id)
+      this.nickname = s.user.nickname || ''
+      this.phone = s.user.phone || ''
+      this.role = s.user.role || 'user'
+      setToken(s.token)
+      setUserId(s.user.user_id)
+      uni.setStorageSync(KEY_ROLE, this.role)
+      this.ready = true
+    },
+
+    async login(phone: string, password: string) {
+      const s = await apiLogin({ phone, password })
+      this.applySession(s)
+      return s
+    },
+
+    async register(phone: string, password: string, nickname: string) {
+      const s = await apiRegister({ phone, password, nickname })
+      this.applySession(s)
+      return s
+    },
+
+    /**
+     * 开发环境联调登录：按固定 openid 造账号，H5 上也用于 ?as= 快速切身份。
+     * 生产环境该接口不存在，调用会失败。
+     */
+    async devLoginAs(role: 'user' | 'provider') {
+      const openid = role === 'provider' ? 'mp_dev_provider' : 'mp_dev_user'
+      uni.setStorageSync(KEY_OPENID, openid)
+      const nickname = role === 'provider' ? '王师傅' : '住户'
+      const res = await devLogin(openid, nickname, role)
+      this.token = res.token
+      this.userId = String(res.user_id)
+      this.nickname = res.nickname || nickname
+      this.role = res.role || role
+      setToken(res.token)
+      setUserId(res.user_id)
+      uni.setStorageSync(KEY_ROLE, this.role)
+      this.ready = true
+    },
+
+    /**
+     * 兼容旧调用：无 token 时尝试 dev 登录，失败则抛错。
+     * 仅供开发期页面（如服务方端）在未接正式登录前使用。
+     */
+    async doLogin() {
+      if (this.isLoggedIn) return
+      const openid = (uni.getStorageSync(KEY_OPENID) as string) || 'mp_dev_user'
       const isProviderAcct = openid === 'mp_dev_provider'
       const nickname = isProviderAcct ? '王师傅' : '住户'
       const res = await devLogin(openid, nickname, isProviderAcct ? 'provider' : 'user')
+      this.token = res.token
       this.userId = String(res.user_id)
       this.nickname = res.nickname || nickname
       this.role = res.role || 'user'
-      uni.setStorageSync(KEY_ROLE, this.role)
+      setToken(res.token)
       setUserId(res.user_id)
+      uni.setStorageSync(KEY_ROLE, this.role)
       this.ready = true
     },
 
@@ -127,17 +203,17 @@ export const useUserStore = defineStore('user', {
     /**
      * 切换演示身份（仅开发环境）。
      * 住户与服务方是两个独立账号，切换后整页刷新。
-     * 生产环境由微信登录决定身份，此方法不会被调用。
+     * 生产环境由正式登录决定身份，此方法不会被调用。
      */
     async switchRole(role: 'user' | 'provider') {
-      const openid = role === 'provider' ? 'mp_dev_provider' : 'mp_dev_user'
-      uni.setStorageSync(KEY_OPENID, openid)
       uni.setStorageSync(KEY_ROLE, role)
+      clearToken()
       clearUserId()
+      this.token = ''
       this.userId = ''
       this.addresses = []
       this.currentAddressId = 0
-      await this.ensureLogin()
+      await this.devLoginAs(role)
       uni.reLaunch({ url: role === 'provider' ? '/pages/provider/tasks' : '/pages/index/index' })
     },
 
@@ -157,15 +233,17 @@ export const useUserStore = defineStore('user', {
       return me
     },
 
-    /** 退出登录：清空本地会话与缓存身份。正式接入微信登录后，下次进入重新走登录流程 */
+    /** 退出登录：清空本地会话与缓存身份，由调用方跳登录页 */
     logout() {
       this.userId = ''
+      this.token = ''
       this.nickname = ''
       this.phone = ''
       this.addresses = []
       this.currentAddressId = 0
       this.ready = false
       this.role = 'user'
+      clearToken()
       clearUserId()
       uni.removeStorageSync(KEY_OPENID)
       uni.removeStorageSync(KEY_ROLE)

@@ -4,6 +4,7 @@ import { onReachBottom, onShow } from '@dcloudio/uni-app'
 import TabBar from '@/components/TabBar.vue'
 import { listOrders, type Order } from '@/api'
 import { useUserStore } from '@/store/user'
+import { ensureAuth } from '@/utils/auth'
 import { friendlyDate, price, SERVICE_LABEL, SLOTS } from '@/utils/format'
 
 const user = useUserStore()
@@ -25,6 +26,7 @@ const finished = ref(false)
 const page = ref(1)
 
 onShow(() => {
+  if (!ensureAuth()) return
   reload()
 })
 

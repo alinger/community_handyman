@@ -15,6 +15,7 @@ import {
   type ServiceRecord,
 } from '@/api'
 import { useUserStore } from '@/store/user'
+import { ensureAuth } from '@/utils/auth'
 import { friendlyDate, price, SERVICE_LABEL, SLOTS } from '@/utils/format'
 import { ApiError, BASE_URL, getUserId } from '@/utils/request'
 
@@ -73,6 +74,7 @@ const statusHint = computed(() => {
 })
 
 onLoad(async (query) => {
+  if (!ensureAuth()) return
   orderNo.value = (query?.orderNo as string) || ''
   await load()
 })

@@ -1,16 +1,21 @@
 package model
 
 // User 用户表。role 区分住户、服务方与后台，V1 阶段服务方与运营可由同一人承担。
+// PasswordHash 为空表示该账号没设密码（历史账号或纯微信登录），只能在 dev 环境用联调接口进入。
 type User struct {
 	BaseModel
-	OpenID      string `gorm:"column:openid;size:64;uniqueIndex:uk_users_openid;not null" json:"openid"`
-	Nickname    string `gorm:"size:64;not null;default:''" json:"nickname"`
-	Avatar      string `gorm:"size:512;not null;default:''" json:"avatar"`
-	Phone       string `gorm:"size:20;not null;default:''" json:"phone"`
-	DefaultArea string `gorm:"size:64;not null;default:''" json:"default_area"`
-	Role        string `gorm:"size:16;not null;default:'user'" json:"role"`
-	Status      int8   `gorm:"not null;default:1" json:"status"`
+	OpenID       string `gorm:"column:openid;size:64;uniqueIndex:uk_users_openid;not null" json:"openid"`
+	Nickname     string `gorm:"size:64;not null;default:''" json:"nickname"`
+	Avatar       string `gorm:"size:512;not null;default:''" json:"avatar"`
+	Phone        string `gorm:"size:20;not null;default:''" json:"phone"`
+	PasswordHash string `gorm:"size:128;not null;default:''" json:"-"`
+	DefaultArea  string `gorm:"size:64;not null;default:''" json:"default_area"`
+	Role         string `gorm:"size:16;not null;default:'user'" json:"role"`
+	Status       int8   `gorm:"not null;default:1" json:"status"`
 }
+
+// HasPassword 判断账号是否设置了登录密码。
+func (u User) HasPassword() bool { return u.PasswordHash != "" }
 
 // UserStatusUser / UserStatusBanned 用户封禁状态。
 const (

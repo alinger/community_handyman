@@ -76,6 +76,7 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 	orderSvc := service.NewOrderService(db, orderRepo, slotRepo, skuRepo, addrRepo, areaRepo, quoteRepo, gw)
 	paySvc := service.NewPaymentService(db, orderRepo, payRepo, gw)
 	userSvc := service.NewUserService(userRepo)
+	authSvc := service.NewAuthService(userRepo, cfg.Auth.Secret, cfg.Auth.TokenTTL)
 	recordSvc := service.NewRecordService(recordRepo, orderRepo, store)
 	providerSvc := service.NewProviderService(db, orderRepo)
 	adminSvc := service.NewAdminService(db, adminRepo, areaRepo, slotRepo, skuRepo, orderRepo,
@@ -90,6 +91,7 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 		Order:    orderSvc,
 		Payment:  paySvc,
 		User:     userSvc,
+		Auth:     authSvc,
 		Record:   recordSvc,
 		Provider: providerSvc,
 		Admin:    adminSvc,
@@ -102,16 +104,22 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 
 	v1 := r.Group("/api/v1")
 	{
+		// 注册与登录不需要登录态
+		v1.POST("/auth/register", api.Register)
+		v1.POST("/auth/login", api.UserLogin)
+
 		// 本地联调登录，正式环境不注册该路由
 		if cfg.App.Env == "dev" {
 			v1.POST("/dev/login", api.DevLogin)
 		}
 
-		authed := v1.Group("", middleware.RequireUser())
+		// X-User-Id 兼容只在非生产环境开启，线上必须走 Bearer token
+		authed := v1.Group("", middleware.RequireUser(cfg.Auth.Secret, cfg.App.Env != "prod"))
 		{
 			// 个人信息（设置页）
 			authed.GET("/me", api.GetMe)
 			authed.PUT("/me", api.UpdateMe)
+			authed.PUT("/auth/password", api.ChangePassword)
 
 			authed.POST("/addresses", api.CreateAddress)
 			authed.GET("/addresses", api.ListAddresses)

@@ -2,7 +2,7 @@
 import { reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import TabBar from '@/components/TabBar.vue'
-import { checkArea, createAddress, updateAddress } from '@/api'
+import { checkArea, createAddress, listCommunities, updateAddress } from '@/api'
 import { useUserStore } from '@/store/user'
 import { ApiError } from '@/utils/request'
 
@@ -12,10 +12,10 @@ const showAdd = ref(false)
 const editingId = ref(0) // 0 表示新增，非 0 表示编辑该地址
 const saving = ref(false)
 const checkMsg = ref<{ ok: boolean; text: string } | null>(null)
+const communities = ref<string[]>([])
 
 const form = reactive({
   community: '',
-  lane: '',
   house_no: '',
   contact_name: '',
   contact_phone: '',
@@ -24,16 +24,38 @@ const form = reactive({
 onShow(async () => {
   try {
     await user.ensureLogin()
-    await user.loadAddresses()
+    await Promise.all([user.loadAddresses(), loadCommunities()])
   } catch (e) {
     console.warn('[mine] 初始化失败', e)
   }
 })
 
+/** 小区只能从后台配置列表点选 */
+async function loadCommunities() {
+  try {
+    communities.value = await listCommunities()
+  } catch (e) {
+    console.warn('[mine] 小区列表加载失败', e)
+  }
+}
+
+function chooseCommunity() {
+  if (!communities.value.length) {
+    uni.showToast({ title: '暂无可选小区', icon: 'none' })
+    return
+  }
+  uni.showActionSheet({
+    itemList: communities.value,
+    success: (r) => {
+      form.community = communities.value[r.tapIndex]
+      onCheck()
+    },
+  })
+}
+
 function openAdd() {
   editingId.value = 0
-  form.community = user.currentAddress?.community || ''
-  form.lane = ''
+  form.community = ''
   form.house_no = ''
   form.contact_name = ''
   form.contact_phone = ''
@@ -47,7 +69,6 @@ function openEdit(id: number) {
   if (!a) return
   editingId.value = id
   form.community = a.community
-  form.lane = a.lane
   form.house_no = a.house_no
   form.contact_name = a.contact_name
   form.contact_phone = a.contact_phone
@@ -61,14 +82,13 @@ function closeAdd() {
 
 /** 输入门牌后即时校验范围，避免用户填完整张表才被拒 */
 async function onCheck() {
-  if (!form.community || !form.lane || !form.house_no) {
+  if (!form.community || !form.house_no) {
     checkMsg.value = null
     return
   }
   try {
     await checkArea({
       community: form.community,
-      lane: form.lane,
       house_no: form.house_no,
     })
     checkMsg.value = { ok: true, text: '该地址在服务范围内' }
@@ -79,15 +99,14 @@ async function onCheck() {
 
 async function onSave() {
   if (saving.value) return
-  if (!form.community || !form.lane || !form.house_no) {
-    uni.showToast({ title: '请填写完整地址', icon: 'none' })
+  if (!form.community || !form.house_no) {
+    uni.showToast({ title: '请选择小区并填写门牌号', icon: 'none' })
     return
   }
   saving.value = true
   try {
     const data = {
       community: form.community.trim(),
-      lane: form.lane.trim(),
       house_no: form.house_no.trim(),
       contact_name: form.contact_name.trim(),
       contact_phone: form.contact_phone.trim(),
@@ -180,7 +199,7 @@ function callService() {
       >
         <view class="addr-main">
           <view class="addr-title">{{ a.community }}</view>
-          <view class="addr-detail">{{ a.lane }} {{ a.house_no }} {{ a.extra }}</view>
+          <view class="addr-detail">{{ a.house_no }} {{ a.extra }}</view>
           <view v-if="a.contact_name || a.contact_phone" class="addr-contact">
             {{ a.contact_name }}<text v-if="a.contact_name && a.contact_phone"> · </text>{{ a.contact_phone }}
           </view>
@@ -220,13 +239,12 @@ function callService() {
       <view class="sheet" @tap.stop>
         <view class="sheet-title">{{ editingId ? '编辑常用地址' : '添加常用地址' }}</view>
 
-        <view class="form-item">
+        <view class="form-item form-select-item" @tap="chooseCommunity">
           <text class="form-label">小区</text>
-          <input v-model="form.community" class="form-input" placeholder="如：东方冠郡二期" />
-        </view>
-        <view class="form-item">
-          <text class="form-label">路弄</text>
-          <input v-model="form.lane" class="form-input" placeholder="如：众安路779弄" @blur="onCheck" />
+          <text class="form-select" :class="{ placeholder: !form.community }">
+            {{ form.community || '请选择小区' }}
+          </text>
+          <text class="chev">›</text>
         </view>
         <view class="form-item">
           <text class="form-label">门牌号</text>
@@ -442,6 +460,21 @@ function callService() {
 .form-input {
   flex: 1;
   font-size: 28rpx;
+}
+
+/* 小区为后台配置点选，不可自由输入 */
+.form-select-item {
+  position: relative;
+}
+
+.form-select {
+  flex: 1;
+  font-size: 28rpx;
+  color: var(--text);
+}
+
+.form-select.placeholder {
+  color: var(--text-light);
 }
 
 .check-msg {

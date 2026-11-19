@@ -141,6 +141,27 @@ func (a *API) ListAddresses(c *gin.Context) {
 	response.OK(c, out)
 }
 
+// ListCommunities 可选小区列表（后台配置的服务范围按小区去重）。
+// @Summary      可选小区列表
+// @Description  新增地址时小区只能从这份后台配置列表中选择，不能自由输入
+// @Tags         地址
+// @Produce      json
+// @Success      200  {object}  response.Body  "data 为小区名称字符串数组"
+// @Failure      200  {object}  response.Body  "业务错误，见 code"
+// @Security     UserID
+// @Router       /api/v1/addresses/communities [get]
+func (a *API) ListCommunities(c *gin.Context) {
+	list, err := a.Address.Communities(c.Request.Context())
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	if list == nil {
+		list = []string{}
+	}
+	response.OK(c, list)
+}
+
 // CheckArea 地址范围预校验，用于用户输入时的即时反馈。
 // @Summary      地址范围预校验
 // @Tags         地址

@@ -40,10 +40,11 @@ curl http://127.0.0.1:8080/healthz
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | POST | `/api/v1/dev/login` | 本地联调：按 openid 取或建用户（仅 dev） |
-| POST | `/api/v1/addresses` | 新增地址，保存前校验服务范围 |
+| POST | `/api/v1/addresses` | 新增地址，保存前按小区+门牌校验服务范围 |
 | GET | `/api/v1/addresses` | 地址列表 |
+| GET | `/api/v1/addresses/communities` | 可选小区列表（后台配置的启用范围按小区去重） |
 | PUT | `/api/v1/addresses/:id` | 编辑本人地址，重新校验归属与服务范围 |
-| POST | `/api/v1/addresses/check` | 地址范围预校验 |
+| POST | `/api/v1/addresses/check` | 地址范围预校验（小区+门牌，路弄可空） |
 | POST | `/api/v1/orders/preview` | 费用试算，不落库 |
 | POST | `/api/v1/orders` | 下单，返回支付参数 |
 | GET | `/api/v1/orders?tab=` | 订单列表（pending / processing / completed） |

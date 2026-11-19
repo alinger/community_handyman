@@ -52,7 +52,6 @@ definitions:
     required:
     - community
     - house_no
-    - lane
     type: object
   github_com_alinger_community-handyman_server_internal_dto.CreateAddressReq:
     properties:
@@ -77,7 +76,6 @@ definitions:
     required:
     - community
     - house_no
-    - lane
     type: object
   github_com_alinger_community-handyman_server_internal_dto.CreateAreaReq:
     properties:
@@ -289,7 +287,6 @@ definitions:
     required:
     - community
     - house_no
-    - lane
     type: object
   github_com_alinger_community-handyman_server_internal_dto.UpdateSkuReq:
     properties:
@@ -736,6 +733,21 @@ paths:
       security:
       - UserID: []
       summary: 地址范围预校验
+      tags:
+      - 地址
+  /api/v1/addresses/communities:
+    get:
+      description: 新增地址时小区只能从这份后台配置列表中选择，不能自由输入
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 业务错误，见 code
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 可选小区列表
       tags:
       - 地址
   /api/v1/dev/login:

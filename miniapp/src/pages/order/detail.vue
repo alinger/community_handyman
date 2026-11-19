@@ -348,7 +348,7 @@ const cancellable = computed(() => {
         <view v-if="order.address" class="info-row">
           <text class="info-label">服务地址</text>
           <text class="info-value">
-            {{ order.address.community }} {{ order.address.lane }} {{ order.address.house_no }}
+            {{ order.address.community }} {{ [order.address.lane, order.address.house_no].filter(Boolean).join(' ') }}
           </text>
         </view>
         <view v-if="addressContact" class="info-row">

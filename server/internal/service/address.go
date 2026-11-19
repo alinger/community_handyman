@@ -28,9 +28,18 @@ func (s *AddressService) Check(ctx context.Context, community, lane, houseNo str
 	}
 	if area == nil {
 		return nil, errs.BizMsg(errs.CodeAddressOutOfArea,
-			"该地址暂未开通服务，请确认小区与门牌号")
+			"该门牌号暂未开通服务，请确认后重试")
 	}
 	return area, nil
+}
+
+// Communities 返回后台配置的可选小区列表（启用的服务范围按小区去重）。
+func (s *AddressService) Communities(ctx context.Context) ([]string, error) {
+	list, err := s.areas.ListCommunities(ctx)
+	if err != nil {
+		return nil, errs.Wrap(errs.CodeInternal, err)
+	}
+	return list, nil
 }
 
 // Create 新增地址。范围校验前置到这里，下单时不再重复判定。

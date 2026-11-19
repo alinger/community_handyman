@@ -7,6 +7,7 @@ import {
   checkArea,
   createAddress,
   createOrder,
+  listCommunities,
   previewOrder,
   updateAddress,
   type AccompanyHospital,
@@ -55,13 +56,16 @@ const serviceItemOptions = ref<AccompanyServiceItem[]>([])
 /** 默认必选的基础服务费，勾选态锁定；价格只用于展示，金额由后端计算 */
 const baseItem = ref<AccompanyServiceItem | null>(null)
 
-/** 服务地址编辑弹层：复用「我的」页字段，保存后即时刷新试算 */
+/** 服务地址选择弹层：展示小区/门牌/联系人/电话/默认标签，比系统 actionSheet 信息更全 */
+const showAddressPicker = ref(false)
+/** 服务地址编辑弹层：小区从后台配置点选、无路弄字段，保存后即时刷新试算 */
 const showAddressEdit = ref(false)
+const editingAddressId = ref(0) // 0 表示新增，非 0 表示编辑该地址
 const addressSaving = ref(false)
 const addressCheckMsg = ref<{ ok: boolean; text: string } | null>(null)
+const communities = ref<string[]>([])
 const addressForm = reactive({
   community: '',
-  lane: '',
   house_no: '',
   contact_name: '',
   contact_phone: '',
@@ -88,7 +92,7 @@ const slots = computed(() =>
 const addressText = computed(() => {
   const a = user.currentAddress
   if (!a) return ''
-  return `${a.community} ${a.lane} ${a.house_no}`
+  return `${a.community} ${a.house_no}`
 })
 
 /** 所有服务都在地址卡展示联系人与联系方式，方便服务方上门联系 */
@@ -111,7 +115,7 @@ onLoad(async (query) => {
   }
   try {
     await user.ensureLogin()
-    await user.loadAddresses()
+    await Promise.all([user.loadAddresses(), loadCommunities()])
   } catch (e) {
     console.warn('[create] 初始化失败', e)
   }
@@ -236,43 +240,69 @@ async function refreshPreview() {
   }
 }
 
+/** 加载后台配置的小区列表，供地址表单点选 */
+async function loadCommunities() {
+  try {
+    communities.value = await listCommunities()
+  } catch (e) {
+    console.warn('[create] 小区列表加载失败', e)
+  }
+}
+
 function chooseAddress() {
   if (!user.hasAddress) {
     openAddressEdit()
     return
   }
-  const names = user.addresses.map((a) => `${a.community} ${a.lane} ${a.house_no}`)
-  uni.showActionSheet({
-    itemList: names,
-    success: (r) => {
-      user.setCurrentAddress(user.addresses[r.tapIndex].id)
-      refreshPreview()
-    },
-  })
+  showAddressPicker.value = true
+}
+
+/** 从弹层选中地址：切换默认地址后即时刷新费用试算 */
+function selectAddress(id: number) {
+  user.setCurrentAddress(id)
+  showAddressPicker.value = false
+  refreshPreview()
 }
 
 /** 打开地址编辑：已有地址预填并走更新接口，没有地址则走新增 */
-function openAddressEdit() {
-  const a = user.currentAddress
+function openAddressEdit(id?: number) {
+  const a = id
+    ? user.addresses.find((x) => x.id === id)
+    : user.currentAddress
+  editingAddressId.value = a?.id || 0
   addressForm.community = a?.community || ''
-  addressForm.lane = a?.lane || ''
   addressForm.house_no = a?.house_no || ''
   addressForm.contact_name = a?.contact_name || ''
   addressForm.contact_phone = a?.contact_phone || ''
   addressCheckMsg.value = null
+  showAddressPicker.value = false
   showAddressEdit.value = true
+}
+
+/** 小区只能从后台配置列表点选，避免自由输入不规范名称 */
+function chooseCommunity() {
+  if (!communities.value.length) {
+    uni.showToast({ title: '暂无可选小区', icon: 'none' })
+    return
+  }
+  uni.showActionSheet({
+    itemList: communities.value,
+    success: (r) => {
+      addressForm.community = communities.value[r.tapIndex]
+      onAddressCheck()
+    },
+  })
 }
 
 /** 输入门牌后即时校验范围，避免保存时才被后端拒绝 */
 async function onAddressCheck() {
-  if (!addressForm.community || !addressForm.lane || !addressForm.house_no) {
+  if (!addressForm.community || !addressForm.house_no) {
     addressCheckMsg.value = null
     return
   }
   try {
     await checkArea({
       community: addressForm.community,
-      lane: addressForm.lane,
       house_no: addressForm.house_no,
     })
     addressCheckMsg.value = { ok: true, text: '该地址在服务范围内' }
@@ -286,27 +316,25 @@ async function onAddressCheck() {
 
 async function saveAddress() {
   if (addressSaving.value) return
-  if (!addressForm.community || !addressForm.lane || !addressForm.house_no) {
-    uni.showToast({ title: '请填写完整地址', icon: 'none' })
+  if (!addressForm.community || !addressForm.house_no) {
+    uni.showToast({ title: '请选择小区并填写门牌号', icon: 'none' })
     return
   }
   addressSaving.value = true
   try {
     const data = {
       community: addressForm.community.trim(),
-      lane: addressForm.lane.trim(),
       house_no: addressForm.house_no.trim(),
       contact_name: addressForm.contact_name.trim(),
       contact_phone: addressForm.contact_phone.trim(),
     }
-    const current = user.currentAddress
-    const saved = current
-      ? await updateAddress(current.id, data)
+    const saved = editingAddressId.value
+      ? await updateAddress(editingAddressId.value, data)
       : await createAddress(data)
     await user.loadAddresses()
     user.setCurrentAddress(saved.id)
     showAddressEdit.value = false
-    uni.showToast({ title: current ? '已更新' : '已添加', icon: 'success' })
+    uni.showToast({ title: editingAddressId.value ? '已更新' : '已添加', icon: 'success' })
     refreshPreview()
   } catch (e) {
     uni.showModal({
@@ -581,19 +609,51 @@ async function startPay(orderNo: string) {
       <view class="foot-note">提交后可在「订单」中查看服务进度</view>
     </view>
 
+    <!-- 服务地址选择弹层：比系统 actionSheet 展示更多信息 -->
+    <view v-if="showAddressPicker" class="mask" @tap="showAddressPicker = false">
+      <view class="sheet" @tap.stop>
+        <view class="sheet-title">选择服务地址</view>
+        <view class="picker-list">
+          <view
+            v-for="a in user.addresses"
+            :key="a.id"
+            class="picker-item"
+            :class="{ active: a.id === user.currentAddressId }"
+            @tap="selectAddress(a.id)"
+          >
+            <view class="picker-info">
+              <view class="picker-line">
+                <text class="picker-community">{{ a.community }}</text>
+                <text class="picker-house">{{ a.house_no }}</text>
+                <text v-if="a.id === user.currentAddressId" class="picker-tag">当前</text>
+              </view>
+              <view class="picker-contact">
+                <text class="contact-dot" />
+                <text>{{ [a.contact_name, a.contact_phone].filter(Boolean).join(' · ') || '未填写联系人' }}</text>
+              </view>
+            </view>
+            <text class="picker-edit" @tap.stop="openAddressEdit(a.id)">编辑</text>
+          </view>
+        </view>
+        <view class="sheet-actions">
+          <view class="btn-ghost half" @tap="showAddressPicker = false">取消</view>
+          <view class="btn-primary half" @tap="openAddressEdit()">＋ 新增地址</view>
+        </view>
+      </view>
+    </view>
+
     <!-- 服务地址编辑弹层：预约页就地改地址，不必跳「我的」页 -->
     <view v-if="showAddressEdit" class="mask" @tap="showAddressEdit = false">
       <view class="sheet" @tap.stop>
         <view class="sheet-title">
-          {{ user.currentAddress ? '编辑服务地址' : '添加服务地址' }}
+          {{ editingAddressId ? '编辑服务地址' : '添加服务地址' }}
         </view>
-        <view class="form-item">
+        <view class="form-item form-select-item" @tap="chooseCommunity">
           <text class="form-label">小区</text>
-          <input v-model="addressForm.community" class="form-input" placeholder="如：东方冠郡二期" />
-        </view>
-        <view class="form-item">
-          <text class="form-label">路弄</text>
-          <input v-model="addressForm.lane" class="form-input" placeholder="如：众安路779弄" @blur="onAddressCheck" />
+          <text class="form-select" :class="{ placeholder: !addressForm.community }">
+            {{ addressForm.community || '请选择小区' }}
+          </text>
+          <text class="chev">›</text>
         </view>
         <view class="form-item">
           <text class="form-label">门牌号</text>
@@ -1062,6 +1122,91 @@ async function startPay(orderNo: string) {
 .form-input {
   flex: 1;
   font-size: 28rpx;
+}
+
+/* 小区为后台配置点选，不可自由输入 */
+.form-select-item {
+  position: relative;
+}
+
+.form-select {
+  flex: 1;
+  font-size: 28rpx;
+  color: var(--text);
+}
+
+.form-select.placeholder {
+  color: var(--text-light);
+}
+
+/* 地址选择弹层：一条地址展示小区、门牌、联系人与电话 */
+.picker-list {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.picker-item {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 24rpx 20rpx;
+  border: 1rpx solid #e8ecea;
+  border-radius: 14rpx;
+  margin-bottom: 14rpx;
+}
+
+.picker-item.active {
+  border-color: var(--brand);
+  background: var(--brand-light);
+}
+
+.picker-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.picker-line {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex-wrap: wrap;
+}
+
+.picker-community {
+  font-size: 28rpx;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.picker-house {
+  font-size: 26rpx;
+  color: var(--text-sub);
+}
+
+.picker-tag {
+  font-size: 20rpx;
+  color: #fff;
+  background: var(--brand);
+  padding: 2rpx 12rpx;
+  border-radius: 8rpx;
+}
+
+.picker-contact {
+  margin-top: 10rpx;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 23rpx;
+  color: var(--brand-dark);
+}
+
+.picker-edit {
+  flex-shrink: 0;
+  font-size: 23rpx;
+  color: var(--brand-dark);
+  padding: 8rpx 18rpx;
+  border: 1rpx solid var(--brand-light);
+  border-radius: 18rpx;
 }
 
 .check-msg {

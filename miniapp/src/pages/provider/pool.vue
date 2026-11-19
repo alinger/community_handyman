@@ -105,7 +105,7 @@ function slotLabel(code: string): string {
       </view>
 
       <view v-if="o.address" class="addr">
-        {{ o.address.community }} {{ o.address.lane }} {{ o.address.house_no }}
+        {{ o.address.community }} {{ [o.address.lane, o.address.house_no].filter(Boolean).join(' ') }}
       </view>
       <view v-if="o.address && (o.address.contact_name || o.address.contact_phone)" class="contact">
         联系人：{{ o.address.contact_name }} {{ o.address.contact_phone }}

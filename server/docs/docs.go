@@ -645,6 +645,31 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/addresses/communities": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "新增地址时小区只能从这份后台配置列表中选择，不能自由输入",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "地址"
+                ],
+                "summary": "可选小区列表",
+                "responses": {
+                    "200": {
+                        "description": "业务错误，见 code",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/addresses/{id}": {
             "put": {
                 "security": [
@@ -1556,8 +1581,7 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "community",
-                "house_no",
-                "lane"
+                "house_no"
             ],
             "properties": {
                 "community": {
@@ -1578,8 +1602,7 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "community",
-                "house_no",
-                "lane"
+                "house_no"
             ],
             "properties": {
                 "community": {
@@ -1864,8 +1887,7 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "community",
-                "house_no",
-                "lane"
+                "house_no"
             ],
             "properties": {
                 "community": {

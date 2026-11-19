@@ -111,6 +111,7 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 		{
 			authed.POST("/addresses", api.CreateAddress)
 			authed.GET("/addresses", api.ListAddresses)
+			authed.GET("/addresses/communities", api.ListCommunities)
 			authed.PUT("/addresses/:id", api.UpdateAddress)
 			authed.POST("/addresses/check", api.CheckArea)
 

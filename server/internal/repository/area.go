@@ -28,7 +28,8 @@ func (r *AreaRepo) ListActive(ctx context.Context) ([]model.ServiceArea, error) 
 }
 
 // Match 判断地址是否落在服务范围内，命中则返回对应规则。
-// 匹配三要素：小区、路弄、门牌号（含区间与单双号）。
+// 小区限定后，路弄（lane）可为空：此时按门牌号命中该小区任一条启用规则即可；
+// 历史地址仍带路弄，则沿用「路弄 + 门牌」精确匹配。
 func (r *AreaRepo) Match(ctx context.Context, community, lane, houseNo string) (*model.ServiceArea, error) {
 	var areas []model.ServiceArea
 	err := r.db.WithContext(ctx).
@@ -40,8 +41,10 @@ func (r *AreaRepo) Match(ctx context.Context, community, lane, houseNo string) (
 	}
 
 	house := util.ExtractFirstInt(houseNo)
+	lane = strings.TrimSpace(lane)
 	for i := range areas {
-		if !laneMatched(areas[i].Lane, lane) {
+		// 路弄为空时跳过路弄约束，只按门牌区间与单双号判定
+		if lane != "" && !laneMatched(areas[i].Lane, lane) {
 			continue
 		}
 		if houseMatched(areas[i], house) {
@@ -49,6 +52,19 @@ func (r *AreaRepo) Match(ctx context.Context, community, lane, houseNo string) (
 		}
 	}
 	return nil, nil
+}
+
+// ListCommunities 返回后台配置的小区列表：启用的服务范围按小区去重，保持配置顺序。
+// 用户端新增地址时只能从这份列表里选，避免自由输入不规范小区名。
+func (r *AreaRepo) ListCommunities(ctx context.Context) ([]string, error) {
+	var list []string
+	err := r.db.WithContext(ctx).
+		Model(&model.ServiceArea{}).
+		Where("status = ?", 1).
+		Order("MIN(id)").
+		Group("community").
+		Pluck("community", &list).Error
+	return list, err
 }
 
 // laneMatched 判断地址的路弄是否属于规则的任一路段。

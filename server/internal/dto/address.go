@@ -2,9 +2,10 @@
 package dto
 
 // CreateAddressReq 新增地址。
+// 小区改为后台配置选择、路弄字段已取消，因此 lane 允许为空（兼容历史数据仍可带值）。
 type CreateAddressReq struct {
 	Community    string `json:"community" binding:"required,max=64"`
-	Lane         string `json:"lane" binding:"required,max=64"`
+	Lane         string `json:"lane" binding:"max=64"`
 	HouseNo      string `json:"house_no" binding:"required,max=32"`
 	Extra        string `json:"extra" binding:"max=255"`
 	ContactName  string `json:"contact_name" binding:"max=32"`
@@ -14,7 +15,7 @@ type CreateAddressReq struct {
 // UpdateAddressReq 编辑地址。字段与新增一致，复用同一套校验规则。
 type UpdateAddressReq struct {
 	Community    string `json:"community" binding:"required,max=64"`
-	Lane         string `json:"lane" binding:"required,max=64"`
+	Lane         string `json:"lane" binding:"max=64"`
 	HouseNo      string `json:"house_no" binding:"required,max=32"`
 	Extra        string `json:"extra" binding:"max=255"`
 	ContactName  string `json:"contact_name" binding:"max=32"`
@@ -34,8 +35,9 @@ type AddressResp struct {
 }
 
 // CheckAreaReq 地址范围预校验，用于新增地址前的即时提示。
+// lane 可空：小区已由后台配置限定，路弄取消后按小区+门牌校验。
 type CheckAreaReq struct {
 	Community string `json:"community" binding:"required,max=64"`
-	Lane      string `json:"lane" binding:"required,max=64"`
+	Lane      string `json:"lane" binding:"max=64"`
 	HouseNo   string `json:"house_no" binding:"required,max=32"`
 }

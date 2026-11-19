@@ -164,9 +164,14 @@ export function listAddresses() {
   return request<Address[]>({ url: '/api/v1/addresses' })
 }
 
+/** 可选小区：后台配置的服务范围按小区去重，新增地址只能从此处选 */
+export function listCommunities() {
+  return request<string[]>({ url: '/api/v1/addresses/communities' })
+}
+
 export function createAddress(data: {
   community: string
-  lane: string
+  lane?: string
   house_no: string
   extra?: string
   contact_name?: string
@@ -179,7 +184,7 @@ export function updateAddress(
   id: number,
   data: {
     community: string
-    lane: string
+    lane?: string
     house_no: string
     extra?: string
     contact_name?: string
@@ -194,7 +199,7 @@ export function accompanyOptions() {
   return request<AccompanyOptions>({ url: '/api/v1/services/accompany/options' })
 }
 
-export function checkArea(data: { community: string; lane: string; house_no: string }) {
+export function checkArea(data: { community: string; lane?: string; house_no: string }) {
   return request<{ in_service_area: boolean; community: string; lane: string }>({
     url: '/api/v1/addresses/check',
     method: 'POST',

@@ -242,6 +242,20 @@ async function doQuote() {
 const ADMIN_CANCELABLE = ['pending_payment', 'pending_accept', 'accepted', 'on_the_way']
 const adminCancelable = (s: string) => ADMIN_CANCELABLE.includes(s)
 
+/**
+ * 该行有几个次要操作。为 0 时不渲染「更多」，
+ * 避免出现一个点开空白菜单的按钮。
+ */
+function moreCount(row: Order): number {
+  let n = 0
+  if (row.status === 'pending_accept') n++ // 派单
+  if (adminCancelable(row.status)) n += 2 // 改期、代客取消
+  if (row.plan === 'monthly' && row.status !== 'canceled') n++ // 核销
+  if (row.status === 'pending_accept' && row.total_amount === 0) n++ // 历史报价
+  if (row.paid_amount > 0 && !['canceled', 'completed'].includes(row.status)) n++ // 退款
+  return n
+}
+
 const cancelVisible = ref(false)
 const cancelForm = reactive({ orderNo: '', reason: '' })
 const canceling = ref(false)
@@ -358,9 +372,11 @@ async function onExport() {
       </el-form>
     </div>
 
-    <el-table :data="rows" v-loading="loading" border stripe style="width: 100%">
-      <el-table-column prop="order_no" label="订单号" width="190" />
-      <el-table-column label="服务" width="120">
+    <el-table :data="rows" v-loading="loading" border stripe style="width: 100%" class="order-table">
+      <el-table-column prop="order_no" label="订单号" width="205">
+        <template #default="{ row }"><span class="order-no">{{ row.order_no }}</span></template>
+      </el-table-column>
+      <el-table-column label="服务" width="104">
         <template #default="{ row }">
           <el-tag size="small">{{ typeLabel(row.service_type) }}</el-tag>
           <el-tag size="small" :type="row.plan === 'monthly' ? 'warning' : 'info'" class="plan-tag">
@@ -368,48 +384,59 @@ async function onExport() {
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="100">
+      <el-table-column label="状态" width="86">
         <template #default="{ row }">
           <el-tag :type="statusType(row.status)" size="small">{{ row.status_label }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="金额" width="120" align="right">
+      <el-table-column label="金额" width="94" align="right">
         <template #default="{ row }">
           <div>{{ money(row.total_amount) }}</div>
           <div v-if="row.refunded_amount > 0" class="refund-hint">退 {{ money(row.refunded_amount) }}</div>
         </template>
       </el-table-column>
-      <el-table-column label="服务时间" width="150">
-        <template #default="{ row }">{{ row.service_date }}<br /><span class="slot-text">{{ row.slot_code }}</span></template>
-      </el-table-column>
-      <el-table-column label="下单用户" min-width="110">
-        <template #default="{ row }">{{ row.user_nickname || '-' }}</template>
-      </el-table-column>
-      <el-table-column label="服务方" min-width="110">
-        <template #default="{ row }">{{ row.provider_nickname || (row.provider_id ? `ID ${row.provider_id}` : '未派单') }}</template>
-      </el-table-column>
-      <el-table-column label="服务地址" min-width="150">
+      <el-table-column label="服务时间" width="96">
         <template #default="{ row }">
-          {{ row.address ? `${row.address.community} ${row.address.house_no}` : '-' }}
+          <div class="nowrap">{{ row.service_date }}</div>
+          <div class="slot-text">{{ row.slot_code }}</div>
         </template>
       </el-table-column>
-      <el-table-column label="联系人" min-width="150">
+      <el-table-column label="下单用户" width="84" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.user_nickname || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="服务方" width="84" show-overflow-tooltip>
+        <template #default="{ row }">{{ row.provider_nickname || (row.provider_id ? `ID ${row.provider_id}` : '未派单') }}</template>
+      </el-table-column>
+      <!-- 地址与联系人合并成一列：联系人本来就从属于这条地址，两列分开反而占宽 -->
+      <el-table-column label="服务地址 / 联系人" min-width="200">
         <template #default="{ row }">
-          {{ row.address?.contact_name || '-' }}<br /><span class="slot-text">{{ row.address?.contact_phone || '' }}</span>
+          <div class="addr-line">{{ row.address ? `${row.address.community} ${row.address.house_no}` : '-' }}</div>
+          <div v-if="row.address?.contact_name || row.address?.contact_phone" class="slot-text">
+            {{ row.address?.contact_name || '-' }} · {{ row.address?.contact_phone || '-' }}
+          </div>
         </template>
       </el-table-column>
       <el-table-column label="下单时间" width="100">
-        <template #default="{ row }">{{ row.created_at?.slice(5, 16).replace('T', ' ') }}</template>
+        <template #default="{ row }"><span class="nowrap">{{ row.created_at?.slice(5, 16).replace('T', ' ') }}</span></template>
       </el-table-column>
-      <el-table-column label="操作" width="360" fixed="right">
+      <el-table-column label="操作" width="130" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-          <el-button v-if="row.status === 'pending_accept'" link type="primary" @click="openAssign(row)">派单</el-button>
-          <el-button v-if="adminCancelable(row.status)" link type="warning" @click="openReschedule(row)">改期</el-button>
-          <el-button v-if="adminCancelable(row.status)" link type="danger" @click="openCancel(row)">代客取消</el-button>
-          <el-button v-if="row.plan === 'monthly' && row.status !== 'canceled'" link type="primary" @click="openRedeem(row)">核销</el-button>
-          <el-button v-if="row.status === 'pending_accept' && row.total_amount === 0" link type="primary" @click="openQuote(row)">历史报价</el-button>
-          <el-button v-if="row.paid_amount > 0 && !['canceled', 'completed'].includes(row.status)" link type="danger" @click="openRefund(row)">退款</el-button>
+          <!-- 单行最多可能 5 个次要操作，全铺开要 400px，会挤掉订单号与地址；
+               收进下拉后操作列固定 130px，其余列才有足够宽度 -->
+          <el-dropdown v-if="moreCount(row) > 0" trigger="click" class="more-btn" popper-class="order-more-menu">
+            <el-button link type="primary">更多</el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item v-if="row.status === 'pending_accept'" @click="openAssign(row)">派单</el-dropdown-item>
+                <el-dropdown-item v-if="adminCancelable(row.status)" @click="openReschedule(row)">改期</el-dropdown-item>
+                <el-dropdown-item v-if="adminCancelable(row.status)" @click="openCancel(row)">代客取消</el-dropdown-item>
+                <el-dropdown-item v-if="row.plan === 'monthly' && row.status !== 'canceled'" @click="openRedeem(row)">核销</el-dropdown-item>
+                <el-dropdown-item v-if="row.status === 'pending_accept' && row.total_amount === 0" @click="openQuote(row)">历史报价</el-dropdown-item>
+                <el-dropdown-item v-if="row.paid_amount > 0 && !['canceled', 'completed'].includes(row.status)" divided @click="openRefund(row)">退款</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </template>
       </el-table-column>
     </el-table>
@@ -647,6 +674,12 @@ async function onExport() {
 .plan-tag { margin-left: 4px; }
 .slot-text { color: #6b7280; font-size: 12px; }
 .refund-hint { color: #e6a23c; font-size: 12px; }
+.addr-line { color: #1f2937; }
+/* Element Plus 的 .cell 默认 word-break: break-all，会把 20 位订单号从中间劈开。
+   订单号、日期这类不可分割的串必须 keep-all + nowrap。 */
+.order-table :deep(.cell) { word-break: keep-all; }
+.order-no { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.nowrap { white-space: nowrap; }
 .cancel-reason { color: #f56c6c; }
 .records { display: flex; flex-wrap: wrap; gap: 10px; }
 .record-card {
@@ -660,4 +693,15 @@ async function onExport() {
   background: #f3f6f6; color: #0c4a47; font-size: 13px; font-weight: 600;
 }
 .record-meta { padding: 6px 8px; font-size: 12px; color: #374151; }
+</style>
+
+<style>
+/* 下拉菜单被 teleport 到 body，scoped 样式作用不到，只能写全局。
+   默认宽度会挤压「代客取消」造成折行，这里给足宽度并禁止换行。 */
+.order-more-menu .el-dropdown-menu__item {
+  white-space: nowrap;
+  padding: 8px 20px;
+  font-size: 13px;
+}
+.order-more-menu { min-width: 118px; }
 </style>

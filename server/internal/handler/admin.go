@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+
 	"github.com/gin-gonic/gin"
 
 	"github.com/alinger/community-handyman/server/internal/dto"
@@ -227,7 +229,38 @@ func (a *API) AdminListOrders(c *gin.Context) {
 	for i := range list {
 		out = append(out, a.Order.ToOrderResp(&list[i], nil))
 	}
+	a.fillAdminOrderExt(c.Request.Context(), list, out)
 	response.Page(c, out, total, page, size)
+}
+
+// fillAdminOrderExt 批量回填后台扩展信息：下单用户/服务方昵称、数量、退款额、取消原因、关键时间点。
+func (a *API) fillAdminOrderExt(ctx context.Context, orders []model.Order, outs []dto.OrderResp) {
+	ids := make([]uint64, 0, len(orders)*2)
+	for i := range orders {
+		ids = append(ids, orders[i].UserID)
+		if orders[i].ProviderID != nil {
+			ids = append(ids, *orders[i].ProviderID)
+		}
+	}
+	nick, err := a.Admin.NicknameMap(ctx, ids)
+	if err != nil {
+		return // 昵称回填失败不影响主数据
+	}
+	for i := range orders {
+		o, r := &orders[i], &outs[i]
+		r.UserID = o.UserID
+		r.UserNickname = nick[o.UserID]
+		r.ProviderID = o.ProviderID
+		if o.ProviderID != nil {
+			r.ProviderNickname = nick[*o.ProviderID]
+		}
+		r.Quantity = o.Quantity
+		r.PetCount = o.PetCount
+		r.RefundedAmount = o.RefundedAmount
+		r.CancelReason = o.CancelReason
+		r.PaidAt = o.PaidAt
+		r.FinishedAt = o.FinishedAt
+	}
 }
 
 // AdminListProviders 可派单的服务方列表。

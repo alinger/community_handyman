@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -656,4 +657,24 @@ func (s *AdminService) Reschedule(ctx context.Context, adminID uint64, orderNo, 
 			Remark:     remark,
 		})
 	})
+}
+
+// NicknameMap 批量查询用户昵称（含服务方），供订单列表回填展示。
+func (s *AdminService) NicknameMap(ctx context.Context, ids []uint64) (map[uint64]string, error) {
+	out := make(map[uint64]string, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var us []model.User
+	if err := s.db.WithContext(ctx).Where("id IN ?", ids).Find(&us).Error; err != nil {
+		return nil, errs.Wrap(errs.CodeInternal, err)
+	}
+	for _, u := range us {
+		name := u.Nickname
+		if name == "" {
+			name = "用户" + strconv.FormatUint(u.ID, 10)
+		}
+		out[u.ID] = name
+	}
+	return out, nil
 }

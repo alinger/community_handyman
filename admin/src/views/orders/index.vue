@@ -35,6 +35,7 @@ const typeOptions = [
 
 const money = (fen: number) => `¥${(fen / 100).toFixed(2)}`
 const typeLabel = (t: string) => typeOptions.find((x) => x.value === t)?.label || t
+const planLabel = (p: string) => (p === 'monthly' ? '包月' : '单次')
 const statusType = (s: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' => {
   if (s === 'completed') return 'success'
   if (['pending_payment', 'pending_accept'].includes(s)) return 'warning'
@@ -350,22 +351,41 @@ async function onExport() {
 
     <el-table :data="rows" v-loading="loading" border stripe style="width: 100%">
       <el-table-column prop="order_no" label="订单号" width="190" />
-      <el-table-column label="服务" width="110">
-        <template #default="{ row }"><el-tag size="small">{{ typeLabel(row.service_type) }}</el-tag></template>
+      <el-table-column label="服务" width="120">
+        <template #default="{ row }">
+          <el-tag size="small">{{ typeLabel(row.service_type) }}</el-tag>
+          <el-tag size="small" :type="row.plan === 'monthly' ? 'warning' : 'info'" class="plan-tag">
+            {{ planLabel(row.plan) }}
+          </el-tag>
+        </template>
       </el-table-column>
-      <el-table-column label="状态" width="110">
+      <el-table-column label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="statusType(row.status)" size="small">{{ row.status_label }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="金额" width="110" align="right">
-        <template #default="{ row }">{{ money(row.total_amount) }}</template>
-      </el-table-column>
-      <el-table-column prop="service_date" label="服务日期" width="120" />
-      <el-table-column label="联系人" min-width="160">
+      <el-table-column label="金额" width="120" align="right">
         <template #default="{ row }">
-          {{ row.address?.contact_name || '-' }} {{ row.address?.contact_phone || '' }}
+          <div>{{ money(row.total_amount) }}</div>
+          <div v-if="row.refunded_amount > 0" class="refund-hint">退 {{ money(row.refunded_amount) }}</div>
         </template>
+      </el-table-column>
+      <el-table-column label="服务时间" width="150">
+        <template #default="{ row }">{{ row.service_date }}<br /><span class="slot-text">{{ row.slot_code }}</span></template>
+      </el-table-column>
+      <el-table-column label="下单用户" min-width="110">
+        <template #default="{ row }">{{ row.user_nickname || '-' }}</template>
+      </el-table-column>
+      <el-table-column label="服务方" min-width="110">
+        <template #default="{ row }">{{ row.provider_nickname || (row.provider_id ? `ID ${row.provider_id}` : '未派单') }}</template>
+      </el-table-column>
+      <el-table-column label="联系人" min-width="150">
+        <template #default="{ row }">
+          {{ row.address?.contact_name || '-' }}<br /><span class="slot-text">{{ row.address?.contact_phone || '' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="下单时间" width="100">
+        <template #default="{ row }">{{ row.created_at?.slice(5, 16).replace('T', ' ') }}</template>
       </el-table-column>
       <el-table-column label="操作" width="360" fixed="right">
         <template #default="{ row }">
@@ -397,12 +417,25 @@ async function onExport() {
       <template v-if="detail">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="订单号" :span="2">{{ detail.order_no }}</el-descriptions-item>
-          <el-descriptions-item label="服务">{{ typeLabel(detail.service_type) }}</el-descriptions-item>
+          <el-descriptions-item label="服务">
+            {{ typeLabel(detail.service_type) }} · {{ planLabel(detail.plan) }}
+            <span v-if="detail.quantity && detail.quantity > 1"> ×{{ detail.quantity }}</span>
+            <span v-if="(detail.pet_count || 0) > 0">（{{ detail.pet_count }} 只宠物）</span>
+          </el-descriptions-item>
           <el-descriptions-item label="状态">{{ detail.status_label }}</el-descriptions-item>
           <el-descriptions-item label="服务时间">{{ detail.service_date }} {{ detail.slot_code }}</el-descriptions-item>
-          <el-descriptions-item label="金额">{{ money(detail.total_amount) }}</el-descriptions-item>
+          <el-descriptions-item label="金额">
+            {{ money(detail.total_amount) }}
+            <span v-if="(detail.refunded_amount || 0) > 0" class="refund-hint">（已退 {{ money(detail.refunded_amount || 0) }}）</span>
+          </el-descriptions-item>
           <el-descriptions-item label="已付">{{ money(detail.paid_amount) }}</el-descriptions-item>
+          <el-descriptions-item label="下单用户">{{ detail.user_nickname || `ID ${detail.user_id}` }}</el-descriptions-item>
+          <el-descriptions-item label="服务方">
+            {{ detail.provider_nickname || (detail.provider_id ? `ID ${detail.provider_id}` : '未派单') }}
+          </el-descriptions-item>
           <el-descriptions-item label="下单时间">{{ detail.created_at?.slice(0, 19).replace('T', ' ') }}</el-descriptions-item>
+          <el-descriptions-item label="支付时间">{{ detail.paid_at?.slice(0, 19).replace('T', ' ') || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="完成时间">{{ detail.finished_at?.slice(0, 19).replace('T', ' ') || '-' }}</el-descriptions-item>
           <el-descriptions-item label="服务地址" :span="2">
             {{ detail.address?.community }} {{ detail.address?.house_no }}
           </el-descriptions-item>
@@ -412,6 +445,13 @@ async function onExport() {
           <el-descriptions-item v-if="detail.hospital" label="就诊医院">{{ detail.hospital }}</el-descriptions-item>
           <el-descriptions-item v-if="detail.patient_name" label="就诊人">{{ detail.patient_name }}</el-descriptions-item>
           <el-descriptions-item v-if="detail.remark" label="备注" :span="2">{{ detail.remark }}</el-descriptions-item>
+          <el-descriptions-item v-if="detail.cancel_reason" label="取消原因" :span="2">
+            <span class="cancel-reason">{{ detail.cancel_reason }}</span>
+          </el-descriptions-item>
+          <el-descriptions-item v-if="detail.quote" label="陪诊报价" :span="2">
+            {{ money(detail.quote.amount) }}（{{ detail.quote.confirmed ? '用户已确认' : '待用户确认' }}）
+            <span v-if="detail.quote.duration_min"> · 时长约 {{ detail.quote.duration_min }} 分钟</span>
+          </el-descriptions-item>
         </el-descriptions>
 
         <h4 class="sec">费用明细</h4>
@@ -581,6 +621,10 @@ async function onExport() {
 .dialog-hint { margin: 0 0 16px; color: #6b7280; font-size: 13px; }
 .form-hint { color: #9aa3ad; font-size: 12px; line-height: 1.4; }
 .op-tag { margin-left: 6px; }
+.plan-tag { margin-left: 4px; }
+.slot-text { color: #6b7280; font-size: 12px; }
+.refund-hint { color: #e6a23c; font-size: 12px; }
+.cancel-reason { color: #f56c6c; }
 .records { display: flex; flex-wrap: wrap; gap: 10px; }
 .record-card {
   width: 130px; cursor: pointer; border: 1px solid #eef0f2; border-radius: 8px;

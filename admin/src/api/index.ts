@@ -181,6 +181,18 @@ export interface Order {
   hospital?: string
   patient_name?: string
   accompany_items?: PriceItem[]
+  quote?: { amount: number; duration_min: number; confirmed: boolean; created_at: string }
+  // 后台扩展字段
+  user_id?: number
+  user_nickname?: string
+  provider_id?: number | null
+  provider_nickname?: string
+  quantity?: number
+  pet_count?: number
+  refunded_amount?: number
+  cancel_reason?: string
+  paid_at?: string
+  finished_at?: string
 }
 
 // ---------- 接口 ----------

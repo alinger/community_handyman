@@ -65,6 +65,18 @@ type OrderResp struct {
 	Hospital       string      `json:"hospital,omitempty"`
 	PatientName    string      `json:"patient_name,omitempty"`
 	AccompanyItems []PriceItem `json:"accompany_items,omitempty"`
+
+	// 以下为后台扩展字段，用户端不填充（omitempty 不下发）
+	UserNickname    string     `json:"user_nickname,omitempty"`
+	UserID          uint64     `json:"user_id,omitempty"`
+	ProviderID      *uint64    `json:"provider_id,omitempty"`
+	ProviderNickname string    `json:"provider_nickname,omitempty"`
+	Quantity        int        `json:"quantity,omitempty"`
+	PetCount        int        `json:"pet_count,omitempty"`
+	RefundedAmount  int64      `json:"refunded_amount,omitempty"`
+	CancelReason    string     `json:"cancel_reason,omitempty"`
+	PaidAt          *time.Time `json:"paid_at,omitempty"`
+	FinishedAt      *time.Time `json:"finished_at,omitempty"`
 }
 
 // QuoteResp 陪诊报价。Confirmed 为真表示用户已确认并去支付。

@@ -37,6 +37,18 @@ func (r *UserRepo) GetByOpenID(ctx context.Context, openid string) (*model.User,
 	return &u, nil
 }
 
+// ListByIDs 批量查询用户（后台订单列表回填昵称用，防 N+1）。
+func (r *UserRepo) ListByIDs(ctx context.Context, ids []uint64) ([]model.User, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var us []model.User
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&us).Error; err != nil {
+		return nil, err
+	}
+	return us, nil
+}
+
 func (r *UserRepo) Create(ctx context.Context, u *model.User) error {
 	return r.db.WithContext(ctx).Create(u).Error
 }

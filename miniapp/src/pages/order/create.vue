@@ -39,7 +39,6 @@ const form = reactive({
   durationMin: 20,
   feedOnly: false,
   needFamiliar: false,
-  patientName: '',
   hospital: '', // 存 code，名称从后台选项映射
   serviceItems: [] as string[], // 已勾选的陪诊服务项 code
   remark: '',
@@ -214,8 +213,9 @@ function buildPayload(): CreateOrderPayload | null {
     payload.need_familiar = form.needFamiliar
   } else {
     // 陪诊：只回传后台配置项的 code，价格由后端按 SKU 规则计算
+    // 就诊人直接取服务地址的联系人，不再单独输入
     payload.hospital = form.hospital
-    payload.patient_name = form.patientName.trim()
+    payload.patient_name = addr.contact_name.trim()
     payload.service_items = [...form.serviceItems]
     payload.remark = form.remark
   }
@@ -264,10 +264,15 @@ function selectAddress(id: number) {
   refreshPreview()
 }
 
-/** 打开地址编辑：已有地址预填并走更新接口，没有地址则走新增 */
+/**
+ * 打开地址编辑：已有地址预填并走更新接口，没有地址则走新增。
+ * id 必须显式传数字：模板里若写 `@tap="openAddressEdit"` 会把事件对象当 id 传入，
+ * 导致匹配不到地址而误走新增，这里用 typeof 兜底。
+ */
 function openAddressEdit(id?: number) {
-  const a = id
-    ? user.addresses.find((x) => x.id === id)
+  const targetId = typeof id === 'number' ? id : 0
+  const a = targetId
+    ? user.addresses.find((x) => x.id === targetId)
     : user.currentAddress
   editingAddressId.value = a?.id || 0
   addressForm.community = a?.community || ''
@@ -439,7 +444,7 @@ async function startPay(orderNo: string) {
     <view class="card">
       <view class="f-row">
         <view class="f-label">服务地址</view>
-        <text class="addr-edit" @tap.stop="openAddressEdit">编辑</text>
+        <text class="addr-edit" @tap.stop="openAddressEdit(user.currentAddress?.id)">编辑</text>
       </view>
       <view class="f-value" :class="{ placeholder: !addressText }" @tap="chooseAddress">
         <view class="pin" />
@@ -531,17 +536,14 @@ async function startPay(orderNo: string) {
       <view class="f-hint">累计完成 5 单后免熟悉费</view>
     </view>
 
-    <!-- 陪诊信息：医院只能从后台选项选，服务项可多选 -->
+    <!-- 陪诊信息：就诊人取服务地址联系人；医院只能从后台选项选，右对齐展示 -->
     <view v-if="form.serviceType === 'accompany'" class="card">
-      <view class="f-row">
-        <view class="f-label">就诊人</view>
-        <input v-model="form.patientName" class="f-input" placeholder="如：张阿姨" />
-      </view>
-      <view class="divider" />
-      <view class="f-value" :class="{ placeholder: !hospitalName }" @tap="chooseHospital">
+      <view class="f-row hospital-row" @tap="chooseHospital">
         <view class="f-label">就诊医院</view>
-        <text class="f-text">{{ hospitalName || '请选择就诊医院' }}</text>
-        <text class="chev">›</text>
+        <view class="hospital-value" :class="{ placeholder: !hospitalName }">
+          <text>{{ hospitalName || '请选择就诊医院' }}</text>
+          <text class="chev">›</text>
+        </view>
       </view>
       <view class="divider" />
       <!-- 基础服务费：默认必选，勾选态锁定，价格展示用，金额由后端算 -->
@@ -797,6 +799,23 @@ async function startPay(orderNo: string) {
 .f-label-sub {
   font-size: 22rpx;
   font-weight: 400;
+  color: var(--text-light);
+}
+
+/* 就诊医院：标签靠左、选中医院右对齐，与原就诊人输入框视觉一致 */
+.hospital-row {
+  padding: 8rpx 0;
+}
+
+.hospital-value {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  font-size: 26rpx;
+  color: var(--text);
+}
+
+.hospital-value.placeholder {
   color: var(--text-light);
 }
 

@@ -109,6 +109,10 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 
 		authed := v1.Group("", middleware.RequireUser())
 		{
+			// 个人信息（设置页）
+			authed.GET("/me", api.GetMe)
+			authed.PUT("/me", api.UpdateMe)
+
 			authed.POST("/addresses", api.CreateAddress)
 			authed.GET("/addresses", api.ListAddresses)
 			authed.GET("/addresses/communities", api.ListCommunities)

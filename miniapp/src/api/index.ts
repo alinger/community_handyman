@@ -161,6 +161,24 @@ export function devLogin(openid: string, nickname: string, role?: string) {
   })
 }
 
+/* ---------- 个人信息（设置页） ---------- */
+
+export interface MeProfile {
+  user_id: number
+  nickname: string
+  phone: string
+  role: string
+}
+
+export function getMe() {
+  return request<MeProfile>({ url: '/api/v1/me' })
+}
+
+/** 整表提交：phone 传空串即清除 */
+export function updateMe(data: { nickname: string; phone: string }) {
+  return request<MeProfile>({ url: '/api/v1/me', method: 'PUT', data, loading: true })
+}
+
 export function listAddresses() {
   return request<Address[]>({ url: '/api/v1/addresses' })
 }

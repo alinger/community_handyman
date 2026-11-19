@@ -106,3 +106,17 @@ type DevLoginReq struct {
 	Nickname string `json:"nickname" binding:"max=64" example:"住户甲"`
 	Role     string `json:"role" binding:"omitempty,oneof=user provider admin" example:"user"`
 }
+
+// UpdateMeReq 用户端修改个人信息（设置页）。整表提交，nickname 必填、phone 可留空清除。
+type UpdateMeReq struct {
+	Nickname string `json:"nickname" binding:"required,max=32" example:"张阿姨"`
+	Phone    string `json:"phone" binding:"omitempty,max=20" example:"13800138000"`
+}
+
+// MeResp 当前用户信息。
+type MeResp struct {
+	UserID   uint64 `json:"user_id"`
+	Nickname string `json:"nickname"`
+	Phone    string `json:"phone"`
+	Role     string `json:"role"`
+}

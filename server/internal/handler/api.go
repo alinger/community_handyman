@@ -3,6 +3,7 @@ package handler
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -10,6 +11,7 @@ import (
 	"github.com/alinger/community-handyman/server/internal/dto"
 	"github.com/alinger/community-handyman/server/internal/errs"
 	"github.com/alinger/community-handyman/server/internal/middleware"
+	"github.com/alinger/community-handyman/server/internal/model"
 	"github.com/alinger/community-handyman/server/internal/service"
 	"github.com/alinger/community-handyman/server/pkg/response"
 )
@@ -63,6 +65,11 @@ func bindJSON(c *gin.Context, obj any) bool {
 		return false
 	}
 	return true
+}
+
+// trimSpace 去除首尾空白（含全角空格）。
+func trimSpace(s string) string {
+	return strings.Trim(s, " \t\n\r　")
 }
 
 // ---------- 地址 ----------
@@ -378,6 +385,64 @@ func (a *API) SandboxPayCallback(c *gin.Context) {
 	}
 	// 渠道侧约定：返回 200 即视为已受理
 	response.OK(c, gin.H{"received": true})
+}
+
+// ---------- 个人信息（设置页） ----------
+
+// GetMe 当前用户信息。
+// @Summary      当前用户信息
+// @Description  设置页展示昵称、手机号等个人资料
+// @Tags         个人信息
+// @Produce      json
+// @Success      200  {object}  response.Body  "data 为 dto.MeResp"
+// @Security     UserID
+// @Router       /api/v1/me [get]
+func (a *API) GetMe(c *gin.Context) {
+	u, err := a.User.GetByID(c.Request.Context(), middleware.CurrentUserID(c))
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, toMeResp(u))
+}
+
+// UpdateMe 修改个人信息（昵称、手机号）。
+// @Summary      修改个人信息
+// @Description  整表提交，nickname 必填、phone 可留空清除
+// @Tags         个人信息
+// @Accept       json
+// @Produce      json
+// @Param        body  body  dto.UpdateMeReq  true  "昵称与手机号"
+// @Success      200  {object}  response.Body  "data 为更新后的 dto.MeResp"
+// @Failure      200  {object}  response.Body  "业务错误，见 code"
+// @Security     UserID
+// @Router       /api/v1/me [put]
+func (a *API) UpdateMe(c *gin.Context) {
+	var req dto.UpdateMeReq
+	if !bindJSON(c, &req) {
+		return
+	}
+	nickname := trimSpace(req.Nickname)
+	if nickname == "" {
+		response.Fail(c, errs.BizMsg(errs.CodeInvalidParam, "昵称不能为空"))
+		return
+	}
+	uid := middleware.CurrentUserID(c)
+	u, err := a.User.UpdateProfile(c.Request.Context(), uid, nickname, trimSpace(req.Phone))
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, toMeResp(u))
+}
+
+func toMeResp(u *model.User) dto.MeResp {
+	return dto.MeResp{
+		UserID:   u.ID,
+		Nickname: u.Nickname,
+		Phone:    u.Phone,
+		Role:     u.Role,
+	}
 }
 
 // ---------- 联调辅助 ----------

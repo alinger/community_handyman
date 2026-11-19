@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { devLogin, listAddresses, setDefaultAddress as apiSetDefault, type Address } from '@/api'
+import { devLogin, getMe, listAddresses, setDefaultAddress as apiSetDefault, updateMe, type Address } from '@/api'
 import { getUserId, setUserId, clearUserId } from '@/utils/request'
 
 const KEY_OPENID = 'ch_openid'
@@ -16,6 +16,7 @@ export const useUserStore = defineStore('user', {
   state: () => ({
     userId: getUserId(),
     nickname: '',
+    phone: '',
     role: (uni.getStorageSync(KEY_ROLE) as string) || 'user',
     addresses: [] as Address[],
     currentAddressId: 0,
@@ -121,13 +122,34 @@ export const useUserStore = defineStore('user', {
       uni.reLaunch({ url: role === 'provider' ? '/pages/provider/tasks' : '/pages/index/index' })
     },
 
+    /** 从后端拉取最新个人资料（设置页进入时刷新昵称与手机号） */
+    async loadProfile() {
+      const me = await getMe()
+      this.nickname = me.nickname || ''
+      this.phone = me.phone || ''
+      return me
+    },
+
+    /** 保存个人资料并同步本地状态 */
+    async saveProfile(nickname: string, phone: string) {
+      const me = await updateMe({ nickname, phone })
+      this.nickname = me.nickname
+      this.phone = me.phone
+      return me
+    },
+
+    /** 退出登录：清空本地会话与缓存身份。正式接入微信登录后，下次进入重新走登录流程 */
     logout() {
       this.userId = ''
       this.nickname = ''
+      this.phone = ''
       this.addresses = []
       this.currentAddressId = 0
       this.ready = false
+      this.role = 'user'
       clearUserId()
+      uni.removeStorageSync(KEY_OPENID)
+      uni.removeStorageSync(KEY_ROLE)
     },
   },
 })

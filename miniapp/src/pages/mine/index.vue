@@ -18,6 +18,10 @@ function goAddress() {
   uni.navigateTo({ url: '/pages/address/index' })
 }
 
+function goSettings() {
+  uni.navigateTo({ url: '/pages/settings/index' })
+}
+
 function goOrders() {
   uni.reLaunch({ url: '/pages/order/list' })
 }
@@ -70,6 +74,10 @@ function callService() {
           <text class="menu-value">{{ user.currentAddress?.community || '未添加' }}</text>
           <text class="chev">›</text>
         </view>
+      </view>
+      <view class="menu-item" @tap="goSettings">
+        <text>设置</text>
+        <text class="chev">›</text>
       </view>
       <view class="menu-item" @tap="goOrders">
         <text>我的订单</text>

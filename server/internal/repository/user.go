@@ -59,6 +59,13 @@ func (r *UserRepo) UpdateRole(ctx context.Context, userID uint64, role string) e
 		Where("id = ?", userID).Update("role", role).Error
 }
 
+// UpdateProfile 更新用户资料（设置页整表提交，phone 传空串即清除）。
+func (r *UserRepo) UpdateProfile(ctx context.Context, userID uint64, nickname, phone string) error {
+	return r.db.WithContext(ctx).Model(&model.User{}).
+		Where("id = ?", userID).
+		Updates(map[string]any{"nickname": nickname, "phone": phone}).Error
+}
+
 // AddressRepo 地址数据访问。
 type AddressRepo struct {
 	db *gorm.DB

@@ -48,3 +48,23 @@ func (s *UserService) EnsureByOpenID(ctx context.Context, openid, nickname strin
 	}
 	return u, nil
 }
+
+// GetByID 按 ID 取用户，不存在时返回业务错误（而非 nil）供 handler 直接响应。
+func (s *UserService) GetByID(ctx context.Context, userID uint64) (*model.User, error) {
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, errs.Wrap(errs.CodeInternal, err)
+	}
+	if u == nil {
+		return nil, errs.BizMsg(errs.CodeNotFound, "用户不存在")
+	}
+	return u, nil
+}
+
+// UpdateProfile 更新个人资料（昵称、手机号），返回更新后的用户。
+func (s *UserService) UpdateProfile(ctx context.Context, userID uint64, nickname, phone string) (*model.User, error) {
+	if err := s.users.UpdateProfile(ctx, userID, nickname, phone); err != nil {
+		return nil, errs.Wrap(errs.CodeInternal, err)
+	}
+	return s.GetByID(ctx, userID)
+}

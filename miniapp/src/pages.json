@@ -44,6 +44,12 @@
       }
     },
     {
+      "path": "pages/settings/index",
+      "style": {
+        "navigationBarTitleText": "设置"
+      }
+    },
+    {
       "path": "pages/address/index",
       "style": {
         "navigationBarTitleText": "地址管理"

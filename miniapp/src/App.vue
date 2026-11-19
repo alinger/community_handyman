@@ -5,6 +5,9 @@ import { useUserStore } from '@/store/user'
 /** 免登录页面：登录/注册页与静态文档页，未登录也要能直接打开 */
 const PUBLIC_PAGES = ['pages/auth/login', 'pages/auth/register', 'pages/doc/index']
 
+/** 服务方侧页面：已经停在这些页时不要再 reLaunch，否则刷新会打断用户 */
+const isProviderPage = (path: string) => path.startsWith('pages/provider/')
+
 onLaunch(async () => {
   const user = useUserStore()
 
@@ -12,11 +15,17 @@ onLaunch(async () => {
   const launchPath = (uni.getLaunchOptionsSync()?.path || '').replace(/^\//, '')
   const isPublic = PUBLIC_PAGES.some((p) => launchPath.startsWith(p))
 
-  // 已有 token：恢复欢迎页所需的地址数据后按角色分流
+  // 已有 token：恢复欢迎页所需的地址数据后按「视角」分流。
+  //
+  // 这里必须用 isProviderView（权限 + 视角）而不是 role === 'provider'：
+  // 后者会让已认证服务方每次刷新都被拉回工作台，
+  // 即使他上次主动切到了住户视角 —— 视角是用户选择，刷新后要保留。
   if (user.isLoggedIn) {
     try {
       await user.loadAddresses()
-      if (user.role === 'provider' && !isPublic) {
+      // 三点都不满足才分流：
+      //   公开页不打断、已在服务方页不抢跳、视角是住户则留在住户侧
+      if (user.isProviderView && !isPublic && !isProviderPage(launchPath)) {
         uni.reLaunch({ url: '/pages/provider/tasks' })
       }
     } catch (e) {

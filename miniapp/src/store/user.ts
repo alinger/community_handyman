@@ -120,15 +120,17 @@ export const useUserStore = defineStore('user', {
     },
 
     /**
-     * 校正视角与权限的一致性：
-     * 没有服务方权限时视角必须是住户侧，否则会出现「进入服务方界面但接口全 403」。
-     * 有权限时保留上次选择（下次登录直接回到上次看的那一侧）。
+     * 校正视角与权限的一致性，并把结果写回本地。
+     * 没有服务方权限时视角必须是住户侧，否则会出现「进入服务方界面但接口全 403」；
+     * 有权限时保留上次选择（下次打开直接回到上次看的那一侧）。
+     * 无论是否发生校正都写一次，保证 storage 里始终有明确值，
+     * 冷启动读到的就不会是空字符串。
      */
     syncViewMode() {
       if (this.role !== 'provider' && this.viewMode !== 'user') {
         this.viewMode = 'user'
-        uni.setStorageSync(KEY_VIEW, 'user')
       }
+      uni.setStorageSync(KEY_VIEW, this.viewMode)
     },
 
     async login(phone: string, password: string) {

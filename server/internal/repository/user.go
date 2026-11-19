@@ -72,6 +72,30 @@ func (r *AddressRepo) GetByID(ctx context.Context, userID, id uint64) (*model.Ad
 	return &a, nil
 }
 
+// Update 保存地址可编辑字段（含归属条件，防越权改他人地址）。
+func (r *AddressRepo) Update(ctx context.Context, userID uint64, a *model.Address) error {
+	res := r.db.WithContext(ctx).
+		Model(&model.Address{}).
+		Where("id = ? AND user_id = ?", a.ID, userID).
+		Updates(map[string]interface{}{
+			"community":       a.Community,
+			"lane":            a.Lane,
+			"house_no":        a.HouseNo,
+			"extra":           a.Extra,
+			"contact_name":    a.ContactName,
+			"contact_phone":   a.ContactPhone,
+			"in_service_area": a.InServiceArea,
+			"area_id":         a.AreaID,
+		})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
+}
+
 // ListByUser 返回用户的全部地址，默认地址优先。
 func (r *AddressRepo) ListByUser(ctx context.Context, userID uint64) ([]model.Address, error) {
 	var list []model.Address

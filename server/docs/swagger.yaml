@@ -266,6 +266,31 @@ definitions:
     - date
     - items
     type: object
+  github_com_alinger_community-handyman_server_internal_dto.UpdateAddressReq:
+    properties:
+      community:
+        maxLength: 64
+        type: string
+      contact_name:
+        maxLength: 32
+        type: string
+      contact_phone:
+        maxLength: 20
+        type: string
+      extra:
+        maxLength: 255
+        type: string
+      house_no:
+        maxLength: 32
+        type: string
+      lane:
+        maxLength: 64
+        type: string
+    required:
+    - community
+    - house_no
+    - lane
+    type: object
   github_com_alinger_community-handyman_server_internal_dto.UpdateSkuReq:
     properties:
       base_price:
@@ -659,6 +684,35 @@ paths:
       security:
       - UserID: []
       summary: 新增地址
+      tags:
+      - 地址
+  /api/v1/addresses/{id}:
+    put:
+      consumes:
+      - application/json
+      description: 只能编辑本人地址；超出服务范围返回 2001，地址不存在返回 1004
+      parameters:
+      - description: 地址 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 地址信息
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_alinger_community-handyman_server_internal_dto.UpdateAddressReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 业务错误，见 code
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 编辑地址
       tags:
       - 地址
   /api/v1/addresses/check:

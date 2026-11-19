@@ -2,13 +2,14 @@
 import { reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import TabBar from '@/components/TabBar.vue'
-import { checkArea, createAddress } from '@/api'
+import { checkArea, createAddress, updateAddress } from '@/api'
 import { useUserStore } from '@/store/user'
 import { ApiError } from '@/utils/request'
 
 const user = useUserStore()
 
 const showAdd = ref(false)
+const editingId = ref(0) // 0 表示新增，非 0 表示编辑该地址
 const saving = ref(false)
 const checkMsg = ref<{ ok: boolean; text: string } | null>(null)
 
@@ -30,11 +31,26 @@ onShow(async () => {
 })
 
 function openAdd() {
+  editingId.value = 0
   form.community = user.currentAddress?.community || ''
   form.lane = ''
   form.house_no = ''
   form.contact_name = ''
   form.contact_phone = ''
+  checkMsg.value = null
+  showAdd.value = true
+}
+
+/** 编辑已有地址：预填原值，保存时走更新接口 */
+function openEdit(id: number) {
+  const a = user.addresses.find((x) => x.id === id)
+  if (!a) return
+  editingId.value = id
+  form.community = a.community
+  form.lane = a.lane
+  form.house_no = a.house_no
+  form.contact_name = a.contact_name
+  form.contact_phone = a.contact_phone
   checkMsg.value = null
   showAdd.value = true
 }
@@ -69,17 +85,20 @@ async function onSave() {
   }
   saving.value = true
   try {
-    const addr = await createAddress({
+    const data = {
       community: form.community.trim(),
       lane: form.lane.trim(),
       house_no: form.house_no.trim(),
       contact_name: form.contact_name.trim(),
       contact_phone: form.contact_phone.trim(),
-    })
+    }
+    const addr = editingId.value
+      ? await updateAddress(editingId.value, data)
+      : await createAddress(data)
     await user.loadAddresses()
     user.setCurrentAddress(addr.id)
     showAdd.value = false
-    uni.showToast({ title: '已添加', icon: 'success' })
+    uni.showToast({ title: editingId.value ? '已更新' : '已添加', icon: 'success' })
   } catch (e) {
     uni.showModal({
       title: '添加失败',
@@ -166,7 +185,10 @@ function callService() {
             {{ a.contact_name }}<text v-if="a.contact_name && a.contact_phone"> · </text>{{ a.contact_phone }}
           </view>
         </view>
-        <view v-if="user.currentAddressId === a.id" class="tag">默认</view>
+        <view class="addr-actions">
+          <text class="edit-btn" @tap.stop="openEdit(a.id)">编辑</text>
+          <view v-if="user.currentAddressId === a.id" class="tag">默认</view>
+        </view>
       </view>
     </view>
 
@@ -196,7 +218,7 @@ function callService() {
     <!-- 新增地址弹层 -->
     <view v-if="showAdd" class="mask" @tap="closeAdd">
       <view class="sheet" @tap.stop>
-        <view class="sheet-title">添加常用地址</view>
+        <view class="sheet-title">{{ editingId ? '编辑常用地址' : '添加常用地址' }}</view>
 
         <view class="form-item">
           <text class="form-label">小区</text>
@@ -328,6 +350,21 @@ function callService() {
 
 .addr-item.active .addr-title {
   color: var(--brand-dark);
+}
+
+.addr-actions {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  flex-shrink: 0;
+}
+
+.edit-btn {
+  font-size: 23rpx;
+  color: var(--brand-dark);
+  padding: 6rpx 14rpx;
+  border: 1rpx solid var(--brand-light);
+  border-radius: 18rpx;
 }
 
 .tag {

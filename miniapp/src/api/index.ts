@@ -30,6 +30,8 @@ export interface AccompanyServiceItem {
 export interface AccompanyOptions {
   hospitals: AccompanyHospital[]
   service_items: AccompanyServiceItem[]
+  /** 默认必选的基础服务费，后端强制计入；老配置可能没有此字段 */
+  base_item?: AccompanyServiceItem
 }
 
 export interface PriceItem {
@@ -173,7 +175,21 @@ export function createAddress(data: {
   return request<Address>({ url: '/api/v1/addresses', method: 'POST', data })
 }
 
-/** 陪诊可选项：医院与可多选服务项（含单价），由后台配置 */
+export function updateAddress(
+  id: number,
+  data: {
+    community: string
+    lane: string
+    house_no: string
+    extra?: string
+    contact_name?: string
+    contact_phone?: string
+  },
+) {
+  return request<Address>({ url: `/api/v1/addresses/${id}`, method: 'PUT', data })
+}
+
+/** 陪诊可选项：医院、可多选服务项与默认必选的基础费，由后台配置 */
 export function accompanyOptions() {
   return request<AccompanyOptions>({ url: '/api/v1/services/accompany/options' })
 }

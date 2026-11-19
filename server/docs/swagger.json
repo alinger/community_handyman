@@ -638,6 +638,52 @@
                 }
             }
         },
+        "/api/v1/addresses/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "只能编辑本人地址；超出服务范围返回 2001，地址不存在返回 1004",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "地址"
+                ],
+                "summary": "编辑地址",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "地址 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "地址信息",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.UpdateAddressReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "业务错误，见 code",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/dev/login": {
             "post": {
                 "description": "按 openid 取或建用户，仅在 env=dev 时注册该路由",
@@ -1804,6 +1850,40 @@
                     "items": {
                         "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.SetSlotItem"
                     }
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.UpdateAddressReq": {
+            "type": "object",
+            "required": [
+                "community",
+                "house_no",
+                "lane"
+            ],
+            "properties": {
+                "community": {
+                    "type": "string",
+                    "maxLength": 64
+                },
+                "contact_name": {
+                    "type": "string",
+                    "maxLength": 32
+                },
+                "contact_phone": {
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "extra": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "house_no": {
+                    "type": "string",
+                    "maxLength": 32
+                },
+                "lane": {
+                    "type": "string",
+                    "maxLength": 64
                 }
             }
         },

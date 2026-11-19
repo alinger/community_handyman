@@ -2,6 +2,7 @@
 package handler
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -88,6 +89,36 @@ func (a *API) CreateAddress(c *gin.Context) {
 		return
 	}
 	response.Created(c, service.ToAddressResp(addr))
+}
+
+// UpdateAddress 编辑地址，保存前重新校验服务范围与归属。
+// @Summary      编辑地址
+// @Description  只能编辑本人地址；超出服务范围返回 2001，地址不存在返回 1004
+// @Tags         地址
+// @Accept       json
+// @Produce      json
+// @Param        id    path  int                  true  "地址 ID"
+// @Param        body  body  dto.UpdateAddressReq true  "地址信息"
+// @Success      200   {object}  response.Body  "data 为 dto.AddressResp"
+// @Failure      200   {object}  response.Body  "业务错误，见 code"
+// @Security     UserID
+// @Router       /api/v1/addresses/{id} [put]
+func (a *API) UpdateAddress(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		response.Fail(c, errs.BizMsg(errs.CodeInvalidParam, "地址 ID 不合法"))
+		return
+	}
+	var req dto.UpdateAddressReq
+	if !bindJSON(c, &req) {
+		return
+	}
+	addr, err := a.Address.Update(c.Request.Context(), middleware.CurrentUserID(c), id, req)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, service.ToAddressResp(addr))
 }
 
 // ListAddresses 地址列表。

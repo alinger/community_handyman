@@ -42,6 +42,7 @@ curl http://127.0.0.1:8080/healthz
 | POST | `/api/v1/dev/login` | 本地联调：按 openid 取或建用户（仅 dev） |
 | POST | `/api/v1/addresses` | 新增地址，保存前校验服务范围 |
 | GET | `/api/v1/addresses` | 地址列表 |
+| PUT | `/api/v1/addresses/:id` | 编辑本人地址，重新校验归属与服务范围 |
 | POST | `/api/v1/addresses/check` | 地址范围预校验 |
 | POST | `/api/v1/orders/preview` | 费用试算，不落库 |
 | POST | `/api/v1/orders` | 下单，返回支付参数 |
@@ -58,7 +59,7 @@ curl http://127.0.0.1:8080/healthz
 | POST | `/api/v1/provider/orders/:orderNo/reject` | 拒单 |
 | POST | `/api/v1/provider/orders/:orderNo/advance` | 推进节点 |
 | POST | `/api/v1/orders/:orderNo/cancel` | 用户取消（2 小时规则） |
-| GET | `/api/v1/services/accompany/options` | 陪诊可选项：医院与服务项（含单价，后台配置） |
+| GET | `/api/v1/services/accompany/options` | 陪诊可选项：医院、可多选服务项、默认必选的基础费（均后台配置） |
 | POST | `/api/v1/orders/:orderNo/quote/reject` | 拒绝历史陪诊报价，订单关闭（兼容旧订单） |
 | GET | `/api/v1/orders/:orderNo/monthly` | 包月使用情况与核销明细 |
 | POST | `/callback/sandbox/pay` | 沙箱支付回调（仅 sandbox 渠道） |
@@ -133,6 +134,7 @@ migrations/      golang-migrate SQL
 ## 包月与陪诊
 
 - **陪诊**按后台配置的服务项自动计价：医院列表与可多选的服务项（含单价）写在陪诊 SKU 的 `rules.hospitals` / `rules.service_items`，用户端只读 `GET /api/v1/services/accompany/options` 获取；下单只回传医院 code 与所选服务项 code，后端按同一份配置求和并返回支付参数，直接支付，不再走人工报价。前端传价无效；改价、改选项只需 `PUT /api/admin/skus/:id` 部分合并 rules，无需发版。
+- **基础服务费**写在 `rules.base_item`（默认 1000 分），默认必选、后端强制计入明细首位，前端不传 code 也照收、回传也不会重复计；配置缺失时退化为旧的「只按所选项目求和」。因基础费本身构成一单，只选基础费也能下单。
 - **历史报价兼容**：`POST /api/admin/orders/:orderNo/quote` 与 `POST /api/v1/orders/:orderNo/quote/reject` 仅用于金额为 0 的历史待报价订单（`quotes` 表保留）；新陪诊订单 `total_amount > 0` 调用报价接口返回 2003，避免运营误改自动计价结果。
 - **包月**服务期 30 天，从订单服务日期起算，不累计不顺延。不预占未来 30 天库存，只在核销当天占时段；首日在下单时已占位，核销时不再重复占（否则同一单吃掉两个名额）。
 - 核销靠 `monthly_redemptions` 的 `(order_id, service_date)` 唯一索引防重复，重复核销返回「该日期已核销过」，且同一事务内的时段预占会一并回滚。

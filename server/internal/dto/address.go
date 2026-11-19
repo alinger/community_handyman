@@ -11,6 +11,16 @@ type CreateAddressReq struct {
 	ContactPhone string `json:"contact_phone" binding:"max=20"`
 }
 
+// UpdateAddressReq 编辑地址。字段与新增一致，复用同一套校验规则。
+type UpdateAddressReq struct {
+	Community    string `json:"community" binding:"required,max=64"`
+	Lane         string `json:"lane" binding:"required,max=64"`
+	HouseNo      string `json:"house_no" binding:"required,max=32"`
+	Extra        string `json:"extra" binding:"max=255"`
+	ContactName  string `json:"contact_name" binding:"max=32"`
+	ContactPhone string `json:"contact_phone" binding:"max=20"`
+}
+
 // AddressResp 地址响应。
 type AddressResp struct {
 	ID            uint64 `json:"id"`

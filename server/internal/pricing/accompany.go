@@ -23,6 +23,8 @@ type AccompanyItem struct {
 type AccompanyOptions struct {
 	Hospitals    []HospitalOption `json:"hospitals"`
 	ServiceItems []AccompanyItem  `json:"service_items"`
+	// BaseItem 默认必选的基础服务费。未配置时为 nil，计价退化为旧的「只按所选项目求和」。
+	BaseItem *AccompanyItem `json:"base_item,omitempty"`
 }
 
 // ParseAccompanyOptions 解析 SKU 规则中的陪诊选项。

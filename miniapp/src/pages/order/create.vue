@@ -4,8 +4,11 @@ import { onLoad } from '@dcloudio/uni-app'
 import CalendarPicker from '@/components/CalendarPicker.vue'
 import {
   accompanyOptions,
+  checkArea,
+  createAddress,
   createOrder,
   previewOrder,
+  updateAddress,
   type AccompanyHospital,
   type AccompanyServiceItem,
   type CreateOrderPayload,
@@ -49,6 +52,20 @@ const showCalendar = ref(false)
 /** 陪诊可选项全部来自后台配置，前端不内置医院与服务项 */
 const hospitals = ref<AccompanyHospital[]>([])
 const serviceItemOptions = ref<AccompanyServiceItem[]>([])
+/** 默认必选的基础服务费，勾选态锁定；价格只用于展示，金额由后端计算 */
+const baseItem = ref<AccompanyServiceItem | null>(null)
+
+/** 服务地址编辑弹层：复用「我的」页字段，保存后即时刷新试算 */
+const showAddressEdit = ref(false)
+const addressSaving = ref(false)
+const addressCheckMsg = ref<{ ok: boolean; text: string } | null>(null)
+const addressForm = reactive({
+  community: '',
+  lane: '',
+  house_no: '',
+  contact_name: '',
+  contact_phone: '',
+})
 
 const hospitalName = computed(() =>
   hospitals.value.find((h) => h.code === form.hospital)?.name || '',
@@ -109,6 +126,7 @@ async function loadAccompanyOptions() {
     const opts = await accompanyOptions()
     hospitals.value = opts.hospitals || []
     serviceItemOptions.value = opts.service_items || []
+    baseItem.value = opts.base_item || null
     if (!hospitals.value.some((h) => h.code === form.hospital)) {
       form.hospital = hospitals.value[0]?.code || ''
     }
@@ -220,14 +238,7 @@ async function refreshPreview() {
 
 function chooseAddress() {
   if (!user.hasAddress) {
-    uni.showModal({
-      title: '还没有地址',
-      content: '去「我的」页面添加常用地址',
-      confirmText: '去添加',
-      success: (r) => {
-        if (r.confirm) uni.reLaunch({ url: '/pages/mine/index' })
-      },
-    })
+    openAddressEdit()
     return
   }
   const names = user.addresses.map((a) => `${a.community} ${a.lane} ${a.house_no}`)
@@ -238,6 +249,74 @@ function chooseAddress() {
       refreshPreview()
     },
   })
+}
+
+/** 打开地址编辑：已有地址预填并走更新接口，没有地址则走新增 */
+function openAddressEdit() {
+  const a = user.currentAddress
+  addressForm.community = a?.community || ''
+  addressForm.lane = a?.lane || ''
+  addressForm.house_no = a?.house_no || ''
+  addressForm.contact_name = a?.contact_name || ''
+  addressForm.contact_phone = a?.contact_phone || ''
+  addressCheckMsg.value = null
+  showAddressEdit.value = true
+}
+
+/** 输入门牌后即时校验范围，避免保存时才被后端拒绝 */
+async function onAddressCheck() {
+  if (!addressForm.community || !addressForm.lane || !addressForm.house_no) {
+    addressCheckMsg.value = null
+    return
+  }
+  try {
+    await checkArea({
+      community: addressForm.community,
+      lane: addressForm.lane,
+      house_no: addressForm.house_no,
+    })
+    addressCheckMsg.value = { ok: true, text: '该地址在服务范围内' }
+  } catch (e) {
+    addressCheckMsg.value = {
+      ok: false,
+      text: e instanceof ApiError ? e.message : '校验失败',
+    }
+  }
+}
+
+async function saveAddress() {
+  if (addressSaving.value) return
+  if (!addressForm.community || !addressForm.lane || !addressForm.house_no) {
+    uni.showToast({ title: '请填写完整地址', icon: 'none' })
+    return
+  }
+  addressSaving.value = true
+  try {
+    const data = {
+      community: addressForm.community.trim(),
+      lane: addressForm.lane.trim(),
+      house_no: addressForm.house_no.trim(),
+      contact_name: addressForm.contact_name.trim(),
+      contact_phone: addressForm.contact_phone.trim(),
+    }
+    const current = user.currentAddress
+    const saved = current
+      ? await updateAddress(current.id, data)
+      : await createAddress(data)
+    await user.loadAddresses()
+    user.setCurrentAddress(saved.id)
+    showAddressEdit.value = false
+    uni.showToast({ title: current ? '已更新' : '已添加', icon: 'success' })
+    refreshPreview()
+  } catch (e) {
+    uni.showModal({
+      title: '保存失败',
+      content: e instanceof ApiError ? e.message : '请稍后重试',
+      showCancel: false,
+    })
+  } finally {
+    addressSaving.value = false
+  }
 }
 
 function onConfirmTime(payload: { date: string; slot: string }) {
@@ -261,7 +340,8 @@ async function submit() {
       uni.showToast({ title: '请选择就诊医院', icon: 'none' })
       return
     }
-    if (!form.serviceItems.length) {
+    // 基础服务费本身即构成一单，只有未配置基础费的老配置才要求至少选一项
+    if (!form.serviceItems.length && !baseItem.value) {
       uni.showToast({ title: '请至少选择一项陪诊服务', icon: 'none' })
       return
     }
@@ -327,10 +407,13 @@ async function startPay(orderNo: string) {
       <view class="banner-art">{{ banner.art }}</view>
     </view>
 
-    <!-- 服务地址：地址 + 联系人与联系方式 -->
-    <view class="card" @tap="chooseAddress">
-      <view class="f-label">服务地址</view>
-      <view class="f-value" :class="{ placeholder: !addressText }">
+    <!-- 服务地址：地址 + 联系人与联系方式，可直接编辑 -->
+    <view class="card">
+      <view class="f-row">
+        <view class="f-label">服务地址</view>
+        <text class="addr-edit" @tap.stop="openAddressEdit">编辑</text>
+      </view>
+      <view class="f-value" :class="{ placeholder: !addressText }" @tap="chooseAddress">
         <view class="pin" />
         <text class="f-text">{{ addressText || '请选择服务地址' }}</text>
         <text class="chev">›</text>
@@ -433,7 +516,16 @@ async function startPay(orderNo: string) {
         <text class="chev">›</text>
       </view>
       <view class="divider" />
-      <view class="f-label">陪诊服务 <text class="f-label-sub">（可多选）</text></view>
+      <!-- 基础服务费：默认必选，勾选态锁定，价格展示用，金额由后端算 -->
+      <view v-if="baseItem" class="base-item">
+        <view class="base-item-name">
+          <text class="check-box checked">✓</text>
+          <text>{{ baseItem.name }}</text>
+          <text class="base-tag">必选</text>
+        </view>
+        <text class="service-chip-price">{{ price(baseItem.price) }}</text>
+      </view>
+      <view class="f-label service-label">陪诊服务 <text class="f-label-sub">（可多选）</text></view>
       <view class="service-grid">
         <view
           v-for="it in serviceItemOptions"
@@ -487,6 +579,50 @@ async function startPay(orderNo: string) {
         {{ submitting ? '提交中…' : '预约服务' }}
       </view>
       <view class="foot-note">提交后可在「订单」中查看服务进度</view>
+    </view>
+
+    <!-- 服务地址编辑弹层：预约页就地改地址，不必跳「我的」页 -->
+    <view v-if="showAddressEdit" class="mask" @tap="showAddressEdit = false">
+      <view class="sheet" @tap.stop>
+        <view class="sheet-title">
+          {{ user.currentAddress ? '编辑服务地址' : '添加服务地址' }}
+        </view>
+        <view class="form-item">
+          <text class="form-label">小区</text>
+          <input v-model="addressForm.community" class="form-input" placeholder="如：东方冠郡二期" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">路弄</text>
+          <input v-model="addressForm.lane" class="form-input" placeholder="如：众安路779弄" @blur="onAddressCheck" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">门牌号</text>
+          <input v-model="addressForm.house_no" class="form-input" placeholder="如：45号" @blur="onAddressCheck" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">联系人</text>
+          <input v-model="addressForm.contact_name" class="form-input" maxlength="16" placeholder="如：张阿姨" />
+        </view>
+        <view class="form-item">
+          <text class="form-label">联系电话</text>
+          <input
+            v-model="addressForm.contact_phone"
+            class="form-input"
+            type="number"
+            maxlength="11"
+            placeholder="上门服务联系用"
+          />
+        </view>
+        <view v-if="addressCheckMsg" class="check-msg" :class="{ ok: addressCheckMsg.ok }">
+          {{ addressCheckMsg.text }}
+        </view>
+        <view class="sheet-actions">
+          <view class="btn-ghost half" @tap="showAddressEdit = false">取消</view>
+          <view class="btn-primary half" :class="{ 'is-disabled': addressSaving }" @tap="saveAddress">
+            {{ addressSaving ? '保存中…' : '保存' }}
+          </view>
+        </view>
+      </view>
     </view>
 
     <CalendarPicker
@@ -602,6 +738,54 @@ async function startPay(orderNo: string) {
   font-size: 22rpx;
   font-weight: 400;
   color: var(--text-light);
+}
+
+/* 地址卡右上角就地编辑入口 */
+.addr-edit {
+  font-size: 24rpx;
+  color: var(--brand-dark);
+  padding: 4rpx 16rpx;
+  background: var(--brand-light);
+  border-radius: 20rpx;
+}
+
+/* 陪诊基础服务费：默认必选、锁定勾选态 */
+.base-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+  margin: 16rpx 0 4rpx;
+  padding: 18rpx;
+  border: 1rpx solid var(--brand);
+  border-radius: 12rpx;
+  background: var(--brand-light);
+  font-size: 24rpx;
+  color: var(--brand-dark);
+}
+
+.base-item-name {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  min-width: 0;
+}
+
+.check-box.checked {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.base-tag {
+  font-size: 20rpx;
+  padding: 2rpx 10rpx;
+  border-radius: 8rpx;
+  background: rgba(15, 127, 120, 0.14);
+}
+
+.service-label {
+  margin-top: 22rpx;
 }
 
 /* 陪诊服务项多选 */
@@ -833,6 +1017,71 @@ async function startPay(orderNo: string) {
   margin-top: 10rpx;
   font-size: 22rpx;
   color: var(--danger);
+}
+
+/* ---------- 地址编辑弹层 ---------- */
+.mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+}
+
+.sheet {
+  width: 100%;
+  background: #fff;
+  border-radius: 32rpx 32rpx 0 0;
+  padding: 40rpx 32rpx;
+  padding-bottom: calc(40rpx + env(safe-area-inset-bottom));
+}
+
+.sheet-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 24rpx;
+}
+
+.form-item {
+  display: flex;
+  align-items: center;
+  gap: 24rpx;
+  padding: 22rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+}
+
+.form-label {
+  width: 150rpx;
+  font-size: 27rpx;
+  color: var(--text-sub);
+  flex-shrink: 0;
+}
+
+.form-input {
+  flex: 1;
+  font-size: 28rpx;
+}
+
+.check-msg {
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  color: var(--danger);
+}
+
+.check-msg.ok {
+  color: var(--brand-dark);
+}
+
+.sheet-actions {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 36rpx;
+}
+
+.half {
+  flex: 1;
 }
 
 /* ---------- 提交 ---------- */

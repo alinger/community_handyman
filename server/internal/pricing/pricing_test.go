@@ -226,6 +226,83 @@ func TestParseAccompanyOptions(t *testing.T) {
 	if _, ok := opts.FindItem("unknown"); ok {
 		t.Fatal("未配置的 code 不应被找到")
 	}
+	if opts.BaseItem != nil {
+		t.Fatal("未配置基础费时 BaseItem 应为空")
+	}
+}
+
+// accompanyRulesWithBase 对应 000007 迁移后的配置：基础费 1000 分，默认必选。
+const accompanyRulesWithBase = `{
+  "billing": "itemized",
+  "hospitals": [{"code": "renji_east", "name": "仁济医院东院"}],
+  "base_item": {"code": "base_fee", "name": "基础服务费", "price": 1000},
+  "service_items": [
+    {"code": "registration", "name": "取号", "price": 500},
+    {"code": "guide", "name": "引导就诊", "price": 2000}
+  ]
+}`
+
+func TestCalcAccompanyBaseItem(t *testing.T) {
+	cases := []struct {
+		name      string
+		items     []string
+		want      int64
+		wantItems int
+		wantErr   bool
+	}{
+		{
+			// 基础费强制计入：不选任何服务项也能下单，只收基础费
+			name: "只收基础费", items: nil, want: 1000, wantItems: 1,
+		},
+		{
+			// 前端不能通过不传 code 绕过基础费
+			name: "基础费加可选项目", items: []string{"registration", "guide"}, want: 3500, wantItems: 3,
+		},
+		{
+			// 前端回传 base code 必须被忽略，否则会重复计一次
+			name: "前端回传基础费 code 不重复计", items: []string{"base_fee", "registration"}, want: 1500, wantItems: 2,
+		},
+		{
+			name: "伪造服务项仍被拒", items: []string{"not_configured"}, wantErr: true,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := Calc(Input{
+				ServiceType: ServiceAccompany, Plan: PlanSingle,
+				Hospital: "renji_east", ServiceItems: c.items,
+				Rules: json.RawMessage(accompanyRulesWithBase),
+			})
+			if c.wantErr {
+				if err == nil {
+					t.Fatalf("应当报错，实际得到金额 %d", got.Total)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("陪诊计价报错: %v", err)
+			}
+			if got.Total != c.want {
+				t.Fatalf("金额不符，期望 %d 实际 %d，明细 %+v", c.want, got.Total, got.Items)
+			}
+			if len(got.Items) != c.wantItems {
+				t.Fatalf("明细条数不符，期望 %d 实际 %d", c.wantItems, len(got.Items))
+			}
+			if len(got.Items) == 0 || got.Items[0].Name != "基础服务费" || got.Items[0].Amount != 1000 {
+				t.Fatalf("基础费必须排在明细首位且金额来自配置: %+v", got.Items)
+			}
+		})
+	}
+}
+
+func TestParseAccompanyBaseItem(t *testing.T) {
+	opts, err := ParseAccompanyOptions(json.RawMessage(accompanyRulesWithBase))
+	if err != nil {
+		t.Fatalf("解析失败: %v", err)
+	}
+	if opts.BaseItem == nil || opts.BaseItem.Code != "base_fee" || opts.BaseItem.Price != 1000 {
+		t.Fatalf("基础费解析不正确: %+v", opts.BaseItem)
+	}
 }
 
 func TestCalcUnknownService(t *testing.T) {

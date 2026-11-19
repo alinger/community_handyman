@@ -57,6 +57,35 @@ func (s *AddressService) Create(ctx context.Context, userID uint64, req dto.Crea
 	return a, nil
 }
 
+// Update 编辑地址。先校验归属（GetByID 带 user_id），再重新做服务范围校验，
+// 避免把地址改到服务范围外却仍标记 in_service_area=true。
+func (s *AddressService) Update(ctx context.Context, userID, id uint64, req dto.UpdateAddressReq) (*model.Address, error) {
+	a, err := s.addresses.GetByID(ctx, userID, id)
+	if err != nil {
+		return nil, errs.Wrap(errs.CodeInternal, err)
+	}
+	if a == nil {
+		return nil, errs.BizMsg(errs.CodeNotFound, "地址不存在")
+	}
+	area, err := s.Check(ctx, req.Community, req.Lane, req.HouseNo)
+	if err != nil {
+		return nil, err
+	}
+
+	a.Community = req.Community
+	a.Lane = req.Lane
+	a.HouseNo = req.HouseNo
+	a.Extra = req.Extra
+	a.ContactName = req.ContactName
+	a.ContactPhone = req.ContactPhone
+	a.InServiceArea = true
+	a.AreaID = &area.ID
+	if err := s.addresses.Update(ctx, userID, a); err != nil {
+		return nil, errs.Wrap(errs.CodeInternal, err)
+	}
+	return a, nil
+}
+
 // List 返回用户地址列表。
 func (s *AddressService) List(ctx context.Context, userID uint64) ([]model.Address, error) {
 	list, err := s.addresses.ListByUser(ctx, userID)

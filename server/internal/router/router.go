@@ -111,6 +111,7 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 		{
 			authed.POST("/addresses", api.CreateAddress)
 			authed.GET("/addresses", api.ListAddresses)
+			authed.PUT("/addresses/:id", api.UpdateAddress)
 			authed.POST("/addresses/check", api.CheckArea)
 
 			// 陪诊可选项：医院与服务项由后台在 SKU 规则里配置，用户端只读

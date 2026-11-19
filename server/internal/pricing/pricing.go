@@ -234,33 +234,48 @@ func calcDogWalk(in Input) (Result, error) {
 // calcAccompany 按后台配置的服务项单价求和。
 // 用户只回传 code，价格一律从 SKU 规则读取，前端无法篡改金额；
 // 医院必须来自后台选项，防止用自由文本绕过配置。
+// 基础服务费（base_item）默认必选：无论前端传不传都强制计入，且不能靠勾选取消。
 func calcAccompany(in Input) (Result, error) {
 	opts, err := ParseAccompanyOptions(in.Rules)
 	if err != nil {
 		return Result{}, err
 	}
-	if len(opts.ServiceItems) == 0 {
+	if len(opts.ServiceItems) == 0 && opts.BaseItem == nil {
 		return Result{}, fmt.Errorf("陪诊服务项尚未配置，请联系运营在后台设置")
 	}
 	if !opts.HospitalValid(in.Hospital) {
 		return Result{}, fmt.Errorf("请选择列表中的就诊医院")
 	}
-	if len(in.ServiceItems) == 0 {
-		return Result{}, fmt.Errorf("请至少选择一项陪诊服务")
-	}
 
-	// 先把用户勾选的 code 去重，任何一个不在配置里都直接拒绝，避免静默少算
+	// 先把用户勾选的 code 去重，任何一个不在配置里都直接拒绝，避免静默少算。
+	// base_item 的 code 若被前端回传则忽略：基础费由后端强制加，不接受勾选/取消。
+	baseCode := ""
+	if opts.BaseItem != nil {
+		baseCode = opts.BaseItem.Code
+	}
 	wanted := make(map[string]struct{}, len(in.ServiceItems))
 	for _, code := range in.ServiceItems {
+		if code == baseCode {
+			continue
+		}
 		if _, ok := opts.FindItem(code); !ok {
 			return Result{}, fmt.Errorf("包含未配置的陪诊服务项，请刷新后重试")
 		}
 		wanted[code] = struct{}{}
 	}
+	// 没有基础费的老配置仍要求至少选一项，保持既有行为；有基础费时允许只买基础服务。
+	if opts.BaseItem == nil && len(wanted) == 0 {
+		return Result{}, fmt.Errorf("请至少选择一项陪诊服务")
+	}
 
-	// 按后台配置顺序展开明细，价格全部取自配置
-	items := make([]Item, 0, len(wanted))
+	// 基础费排明细首位，价格取自后台配置，前端无法改。
+	items := make([]Item, 0, len(wanted)+1)
 	var total int64
+	if opts.BaseItem != nil {
+		items = append(items, Item{Name: opts.BaseItem.Name, Amount: opts.BaseItem.Price, Note: "默认必选"})
+		total += opts.BaseItem.Price
+	}
+	// 按后台配置顺序展开明细，价格全部取自配置
 	for _, it := range opts.ServiceItems {
 		if _, ok := wanted[it.Code]; !ok {
 			continue

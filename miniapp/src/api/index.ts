@@ -2,7 +2,7 @@
  * 接口封装。字段与 server/docs/swagger.json 保持一致，
  * 后端改字段时这里要同步，否则问题是运行期才暴露。
  */
-import { request } from '@/utils/request'
+import { request, upload } from '@/utils/request'
 
 export interface Address {
   id: number
@@ -118,12 +118,15 @@ export interface CreateOrderPayload {
   need_familiar?: boolean
 }
 
-/** 本地联调登录，仅 dev 环境可用 */
-export function devLogin(openid: string, nickname: string) {
+/**
+ * 本地联调登录，仅 dev 环境可用。
+ * role 用于把 openid 对应的账号设成服务方，开发期身份切换靠它。
+ */
+export function devLogin(openid: string, nickname: string, role?: string) {
   return request<{ user_id: number; openid: string; nickname: string; role: string }>({
     url: '/api/v1/dev/login',
     method: 'POST',
-    data: { openid, nickname },
+    data: { openid, nickname, role },
     auth: false,
   })
 }
@@ -197,4 +200,55 @@ export function listRecords(orderNo: string) {
 
 export function monthlyDetail(orderNo: string) {
   return request<MonthlySummary>({ url: `/api/v1/orders/${orderNo}/monthly` })
+}
+
+/* ---------- 服务方端 ---------- */
+
+/** 可接单池：已支付且未派单的订单 */
+export function providerOpenOrders(page = 1, size = 10) {
+  return request<PageResp<Order>>({
+    url: `/api/v1/provider/orders/open?page=${page}&size=${size}`,
+  })
+}
+
+/** 服务方名下订单 */
+export function providerMyOrders(tab: string, page = 1, size = 10) {
+  return request<PageResp<Order>>({
+    url: `/api/v1/provider/orders?tab=${tab}&page=${page}&size=${size}`,
+  })
+}
+
+export function acceptOrder(orderNo: string) {
+  return request<{ accepted: boolean }>({
+    url: `/api/v1/provider/orders/${orderNo}/accept`,
+    method: 'POST',
+    loading: true,
+  })
+}
+
+export function rejectOrder(orderNo: string, reason: string) {
+  return request<{ rejected: boolean }>({
+    url: `/api/v1/provider/orders/${orderNo}/reject`,
+    method: 'POST',
+    data: { reason },
+    loading: true,
+  })
+}
+
+/** 推进节点，node 取 on_the_way / in_service / pending_confirm */
+export function advanceOrder(orderNo: string, node: string) {
+  return request<{ node: string }>({
+    url: `/api/v1/provider/orders/${orderNo}/advance`,
+    method: 'POST',
+    data: { node },
+    loading: true,
+  })
+}
+
+/** 上传服务记录（图片） */
+export function uploadRecord(orderNo: string, filePath: string, mediaType = 'photo') {
+  return upload(`/api/v1/orders/${orderNo}/records`, filePath, {
+    media_type: mediaType,
+    duration_sec: '0',
+  })
 }

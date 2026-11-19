@@ -97,6 +97,21 @@ function goOrders() {
   uni.reLaunch({ url: '/pages/order/list' })
 }
 
+/**
+ * 开发环境切换演示身份（住户 ↔ 服务方）。
+ * 生产环境身份由微信登录决定，这个入口不会渲染。
+ */
+async function onSwitchRole(role: 'user' | 'provider') {
+  if (user.role === role) {
+    uni.showToast({ title: '已经是该身份', icon: 'none' })
+    return
+  }
+  await user.switchRole(role)
+}
+
+const isDev = import.meta.env.DEV
+
+
 function callService() {
   uni.showModal({
     title: '联系客服',
@@ -148,6 +163,10 @@ function callService() {
       </view>
       <view class="menu-item" @tap="callService">
         <text>联系客服</text>
+        <text class="chev">›</text>
+      </view>
+      <view v-if="isDev" class="menu-item" @tap="onSwitchRole(user.role === 'user' ? 'provider' : 'user')">
+        <text>切换为{{ user.role === 'user' ? '服务方' : '住户' }}（演示）</text>
         <text class="chev">›</text>
       </view>
     </view>

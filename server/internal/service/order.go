@@ -195,12 +195,13 @@ func (s *OrderService) List(ctx context.Context, userID uint64, tab string, page
 }
 
 // Detail 订单详情，带节点时间轴。
+// 下单用户与该单服务方都可以看：服务方接单后需要地址与备注才能上门。
 func (s *OrderService) Detail(ctx context.Context, userID uint64, orderNo string) (*dto.OrderResp, error) {
 	o, err := s.orders.GetByNo(ctx, orderNo)
 	if err != nil {
 		return nil, errs.Wrap(errs.CodeInternal, err)
 	}
-	if o == nil || o.UserID != userID {
+	if o == nil || !canAccessOrder(o, userID) {
 		return nil, errs.Biz(errs.CodeNotFound)
 	}
 	events, err := s.orders.Events(ctx, o.ID)
@@ -501,9 +502,11 @@ func buildNodes(st model.ServiceType, status model.OrderStatus, events []model.O
 			{string(model.OrderPendingConfirm), "待完成"},
 		}
 	default:
+		// 垃圾类可能跳过「待上门」直接开始服务，节点里保留服务中
 		defs = []nodeDef{
 			{string(model.OrderAccepted), "已受理"},
 			{string(model.OrderOnTheWay), "待上门"},
+			{string(model.OrderInService), "服务中"},
 			{string(model.OrderPendingConfirm), "待完成"},
 		}
 	}

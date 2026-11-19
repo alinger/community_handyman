@@ -47,6 +47,11 @@ const steps = [
 onShow(async () => {
   try {
     await user.ensureLogin()
+    // 服务方不进住户首页，直接去任务列表
+    if (user.role === 'provider') {
+      uni.reLaunch({ url: '/pages/provider/tasks' })
+      return
+    }
     await user.loadAddresses()
   } catch (e) {
     console.warn('[index] 加载失败', e)

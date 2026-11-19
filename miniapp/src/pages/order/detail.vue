@@ -2,11 +2,13 @@
 import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import {
+  advanceOrder,
   cancelOrder,
   confirmOrder,
   listRecords,
   orderDetail,
   payOrder,
+  uploadRecord,
   type Order,
   type ServiceRecord,
 } from '@/api'
@@ -20,6 +22,10 @@ const order = ref<Order | null>(null)
 const records = ref<ServiceRecord[]>([])
 const loading = ref(true)
 const acting = ref(false)
+const uploading = ref(false)
+
+/** 服务方视角：接单后可推进节点、上传记录 */
+const isProvider = computed(() => user.role === 'provider')
 
 const slotText = computed(() => {
   const code = order.value?.slot_code || ''
@@ -199,6 +205,82 @@ function previewImage(rec: ServiceRecord) {
   uni.previewImage({ urls, current })
 }
 
+/** 服务方按状态可执行的推进动作，合法性最终由后端白名单兜底 */
+const providerActions = computed(() => {
+  const o = order.value
+  if (!isProvider.value || !o) return []
+  const acts: { node: string; label: string }[] = []
+  if (o.status === 'accepted') {
+    if (o.service_type === 'garbage') acts.push({ node: 'on_the_way', label: '出发上门' })
+    acts.push({ node: 'in_service', label: '开始服务' })
+  } else if (o.status === 'on_the_way') {
+    acts.push({ node: 'in_service', label: '开始服务' })
+  } else if (o.status === 'in_service') {
+    acts.push({ node: 'pending_confirm', label: '完成服务' })
+  }
+  return acts
+})
+
+/** 已接单到完成后都可补传照片 */
+const canUploadRecord = computed(() => {
+  if (!isProvider.value || !order.value) return false
+  return ['accepted', 'on_the_way', 'in_service', 'pending_confirm', 'completed'].includes(
+    order.value.status,
+  )
+})
+
+async function onAdvance(node: string) {
+  if (!order.value || acting.value) return
+  acting.value = true
+  try {
+    await advanceOrder(order.value.order_no, node)
+    uni.showToast({ title: '已更新', icon: 'success' })
+    await load()
+  } catch (e) {
+    uni.showModal({
+      title: '操作失败',
+      content: e instanceof ApiError ? e.message : '请稍后重试',
+      showCancel: false,
+    })
+  } finally {
+    acting.value = false
+  }
+}
+
+function chooseUpload() {
+  if (uploading.value || !order.value) return
+  // #ifdef MP-WEIXIN
+  uni.chooseMedia({
+    count: 1,
+    mediaType: ['image'],
+    success: (res) => {
+      if (res.tempFiles?.length) doUpload(res.tempFiles[0].tempFilePath)
+    },
+  })
+  // #endif
+  // #ifndef MP-WEIXIN
+  uni.chooseImage({
+    count: 1,
+    success: (res) => {
+      if (res.tempFilePaths?.length) doUpload(res.tempFilePaths[0])
+    },
+  })
+  // #endif
+}
+
+async function doUpload(path: string) {
+  uploading.value = true
+  try {
+    await uploadRecord(order.value.order_no, path, 'photo')
+    uni.showToast({ title: '已上传', icon: 'success' })
+    records.value = await listRecords(order.value.order_no)
+  } catch (e) {
+    uni.showToast({ title: e instanceof ApiError ? e.message : '上传失败', icon: 'none' })
+  } finally {
+    uploading.value = false
+  }
+}
+
 /** 能否取消 */
 const cancellable = computed(() => {
   const s = order.value?.status
@@ -308,8 +390,14 @@ const cancellable = computed(() => {
       </view>
 
       <!-- 服务记录 -->
-      <view v-if="records.length" class="card">
-        <view class="section-title">服务记录</view>
+      <view v-if="records.length || canUploadRecord" class="card">
+        <view class="row">
+          <view class="section-title">服务记录</view>
+          <view v-if="canUploadRecord" class="upload-btn" @tap="chooseUpload">
+            {{ uploading ? '上传中…' : '📷 上传照片' }}
+          </view>
+        </view>
+        <view v-if="!records.length" class="hint">还没有记录，服务过程中拍照上传</view>
         <view class="record-grid">
           <view v-for="r in records" :key="r.id" class="record" @tap="previewImage(r)">
             <image
@@ -327,15 +415,30 @@ const cancellable = computed(() => {
         <view class="hint">记录由服务方上传，不可删除</view>
       </view>
 
-      <!-- 操作 -->
+      <!-- 操作：服务方推进节点，住户支付/取消/确认 -->
       <view v-if="order.status !== 'canceled' && order.status !== 'rejected'" class="bottom-bar">
-        <view v-if="cancellable" class="btn-ghost half" @tap="onCancel">取消订单</view>
-        <view v-if="order.status === 'pending_payment'" class="btn-primary half" @tap="onPay">
-          {{ acting ? '处理中…' : '立即支付' }}
-        </view>
-        <view v-if="order.status === 'pending_confirm'" class="btn-primary half" @tap="onConfirm">
-          确认完成
-        </view>
+        <template v-if="isProvider">
+          <view
+            v-for="a in providerActions"
+            :key="a.node"
+            class="btn-primary half"
+            @tap="onAdvance(a.node)"
+          >
+            {{ acting ? '处理中…' : a.label }}
+          </view>
+          <view v-if="!providerActions.length" class="btn-ghost half">
+            等待住户确认
+          </view>
+        </template>
+        <template v-else>
+          <view v-if="cancellable" class="btn-ghost half" @tap="onCancel">取消订单</view>
+          <view v-if="order.status === 'pending_payment'" class="btn-primary half" @tap="onPay">
+            {{ acting ? '处理中…' : '立即支付' }}
+          </view>
+          <view v-if="order.status === 'pending_confirm'" class="btn-primary half" @tap="onConfirm">
+            确认完成
+          </view>
+        </template>
       </view>
     </template>
 
@@ -584,5 +687,21 @@ const cancellable = computed(() => {
 
 .half {
   flex: 1;
+}
+
+.upload-btn {
+  font-size: 24rpx;
+  color: var(--brand-dark);
+  background: var(--brand-light);
+  padding: 10rpx 24rpx;
+  border-radius: 26rpx;
+}
+
+.upload-btn {
+  font-size: 24rpx;
+  color: var(--brand-dark);
+  background: var(--brand-light);
+  padding: 10rpx 24rpx;
+  border-radius: 26rpx;
 }
 </style>

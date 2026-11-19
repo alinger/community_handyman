@@ -1,20 +1,34 @@
 <script setup lang="ts">
 /**
- * 自定义底部导航。
- * 不用原生 tabBar：原生 tabBar 必须配图片图标，项目暂无设计资源，
- * 且服务方端也要复用这套导航（按角色换 tab），自定义更灵活。
+ * 自定义底部导航，按角色分流：
+ * 住户：首页 / 订单 / 我的
+ * 服务方：任务 / 接单池 / 我的
+ * 不用原生 tabBar：一是要配图片图标（暂无设计资源），
+ * 二是同一工程要承载两种角色，原生 tab 配置是全局唯一的。
  */
-const props = defineProps<{ current: 'index' | 'orders' | 'mine' }>()
+import { computed } from 'vue'
+import { useUserStore } from '@/store/user'
 
-const items = [
-  { key: 'index' as const, label: '首页', path: '/pages/index/index' },
-  { key: 'orders' as const, label: '订单', path: '/pages/order/list' },
-  { key: 'mine' as const, label: '我的', path: '/pages/mine/index' },
-]
+const props = defineProps<{ current: string }>()
+const user = useUserStore()
 
-function go(item: (typeof items)[number]) {
+const items = computed(() => {
+  if (user.role === 'provider') {
+    return [
+      { key: 'ptasks', label: '任务', path: '/pages/provider/tasks' },
+      { key: 'pool', label: '接单池', path: '/pages/provider/pool' },
+      { key: 'mine', label: '我的', path: '/pages/mine/index' },
+    ]
+  }
+  return [
+    { key: 'index', label: '首页', path: '/pages/index/index' },
+    { key: 'orders', label: '订单', path: '/pages/order/list' },
+    { key: 'mine', label: '我的', path: '/pages/mine/index' },
+  ]
+})
+
+function go(item: { key: string; label: string; path: string }) {
   if (item.key === props.current) return
-  // reLaunch 清空页面栈，避免来回切 tab 把栈堆满
   uni.reLaunch({ url: item.path })
 }
 </script>

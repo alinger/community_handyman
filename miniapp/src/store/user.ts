@@ -3,6 +3,7 @@ import { devLogin, listAddresses, type Address } from '@/api'
 import { getUserId, setUserId, clearUserId } from '@/utils/request'
 
 const KEY_OPENID = 'ch_openid'
+const KEY_ROLE = 'ch_role'
 
 /**
  * 用户与地址状态。
@@ -15,9 +16,11 @@ export const useUserStore = defineStore('user', {
   state: () => ({
     userId: getUserId(),
     nickname: '',
+    role: (uni.getStorageSync(KEY_ROLE) as string) || 'user',
     addresses: [] as Address[],
     currentAddressId: 0,
     ready: false,
+    loginPromise: null as Promise<void> | null,
   }),
 
   getters: {
@@ -30,8 +33,22 @@ export const useUserStore = defineStore('user', {
   },
 
   actions: {
-    /** 确保已登录，重复调用不会重复请求 */
+    /**
+     * 确保已登录，重复调用不会重复请求。
+     * App.onLaunch 与页面 onShow 会并发调用，这里用同一个 Promise 去重，
+     * 页面侧 await 它即可保证拿到登录结果再发业务请求。
+     */
     async ensureLogin() {
+      if (this.userId) return
+      if (!this.loginPromise) {
+        this.loginPromise = this.doLogin().finally(() => {
+          this.loginPromise = null
+        })
+      }
+      await this.loginPromise
+    },
+
+    async doLogin() {
       if (this.userId) return
       // 开发期用固定 openid：H5 与开发者工具共用同一账号，
       // 便于在后台造数据后回到页面直接看到。生产环境这段整体被微信登录替换。
@@ -40,9 +57,24 @@ export const useUserStore = defineStore('user', {
         openid = 'mp_dev_user'
         uni.setStorageSync(KEY_OPENID, openid)
       }
-      const res = await devLogin(openid, '住户')
+      // H5 支持在地址上加 ?as=provider|user 快速切换演示身份。
+      // /dev/login 只在后端 dev 环境注册，生产后端直接 404，此入口天然失效。
+      // #ifdef H5
+      {
+        const as = new URLSearchParams(window.location.search).get('as')
+        if (as === 'provider' || as === 'user') {
+          openid = `mp_dev_${as}`
+          uni.setStorageSync(KEY_OPENID, openid)
+        }
+      }
+      // #endif
+      const isProviderAcct = openid === 'mp_dev_provider'
+      const nickname = isProviderAcct ? '王师傅' : '住户'
+      const res = await devLogin(openid, nickname, isProviderAcct ? 'provider' : 'user')
       this.userId = String(res.user_id)
-      this.nickname = res.nickname || '住户'
+      this.nickname = res.nickname || nickname
+      this.role = res.role || 'user'
+      uni.setStorageSync(KEY_ROLE, this.role)
       setUserId(res.user_id)
       this.ready = true
     },
@@ -59,6 +91,23 @@ export const useUserStore = defineStore('user', {
 
     setCurrentAddress(id: number) {
       this.currentAddressId = id
+    },
+
+    /**
+     * 切换演示身份（仅开发环境）。
+     * 住户与服务方是两个独立账号，切换后整页刷新。
+     * 生产环境由微信登录决定身份，此方法不会被调用。
+     */
+    async switchRole(role: 'user' | 'provider') {
+      const openid = role === 'provider' ? 'mp_dev_provider' : 'mp_dev_user'
+      uni.setStorageSync(KEY_OPENID, openid)
+      uni.setStorageSync(KEY_ROLE, role)
+      clearUserId()
+      this.userId = ''
+      this.addresses = []
+      this.currentAddressId = 0
+      await this.ensureLogin()
+      uni.reLaunch({ url: role === 'provider' ? '/pages/provider/tasks' : '/pages/index/index' })
     },
 
     logout() {

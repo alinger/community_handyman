@@ -16,6 +16,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'areas', name: 'areas', component: () => import('@/views/areas/index.vue'), meta: { title: '服务范围' } },
       { path: 'slots', name: 'slots', component: () => import('@/views/slots/index.vue'), meta: { title: '时段库存' } },
       { path: 'skus', name: 'skus', component: () => import('@/views/skus/index.vue'), meta: { title: '服务与价格' } },
+      { path: 'accounts', name: 'accounts', component: () => import('@/views/accounts/index.vue'), meta: { title: '账号管理' } },
     ],
   },
 ]

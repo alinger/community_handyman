@@ -29,6 +29,40 @@ type CopySlotsReq struct {
 	TargetDates []string `json:"target_dates" binding:"required,min=1,max=62,dive,required" example:"2026-11-21"`
 }
 
+// CreateAdminReq 新建后台账号（仅超管）。
+type CreateAdminReq struct {
+	Username string `json:"username" binding:"required,max=32" example:"operator01"`
+	Password string `json:"password" binding:"required,min=6,max=64" example:"your-password"`
+	Role     string `json:"role" binding:"required,oneof=admin operator" example:"operator"`
+}
+
+// SetAdminStatusReq 启停后台账号（仅超管）。
+type SetAdminStatusReq struct {
+	Status int8 `json:"status" binding:"oneof=0 1" example:"0"`
+}
+
+// ResetAdminPwdReq 超管重置账号密码（仅超管）。
+type ResetAdminPwdReq struct {
+	Password string `json:"password" binding:"required,min=6,max=64" example:"new-password"`
+}
+
+// ChangeMyPwdReq 后台账号自助修改密码（需验证旧密码）。
+type ChangeMyPwdReq struct {
+	OldPassword string `json:"old_password" binding:"required,max=64" example:"old-password"`
+	NewPassword string `json:"new_password" binding:"required,min=6,max=64" example:"new-password"`
+}
+
+// AdminCancelReq 运营代客取消。
+type AdminCancelReq struct {
+	Reason string `json:"reason" binding:"required,max=200" example:"用户来电要求取消"`
+}
+
+// AdminRescheduleReq 运营代客改期。
+type AdminRescheduleReq struct {
+	ServiceDate string `json:"service_date" binding:"required" example:"2026-11-21"`
+	SlotCode    string `json:"slot_code" binding:"required,max=16" example:"10-12"`
+}
+
 // AdminPayment 支付流水行。
 type AdminPayment struct {
 	ID            uint64     `json:"id"`
@@ -111,4 +145,13 @@ type AdminStatusCount struct {
 type AdminServiceCount struct {
 	ServiceType string `json:"service_type"`
 	Count       int64  `json:"count"`
+}
+
+// AdminAccountRow 后台账号行。
+type AdminAccountRow struct {
+	ID        uint64    `json:"id"`
+	Username  string    `json:"username"`
+	Role      string    `json:"role"`
+	Status    int8      `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
 }

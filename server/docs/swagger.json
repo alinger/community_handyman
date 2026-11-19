@@ -8,6 +8,158 @@
     },
     "basePath": "/",
     "paths": {
+        "/api/admin/accounts": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "后台账号列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "仅超管；角色 operator 只能做日常运营，admin 才能退款与账号管理",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "新建后台账号",
+                "parameters": [
+                    {
+                        "description": "账号信息",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.CreateAdminReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/accounts/{id}/password": {
+            "patch": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "重置后台账号密码",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "账号 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "新密码",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.ResetAdminPwdReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/accounts/{id}/status": {
+            "patch": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "不能停用自己的账号；停用后该账号无法登录",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "启停后台账号",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "账号 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "1 启用 / 0 停用",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.SetAdminStatusReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/api/admin/areas": {
             "get": {
                 "security": [
@@ -340,6 +492,52 @@
                 }
             }
         },
+        "/api/admin/orders/{orderNo}/cancel": {
+            "post": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "仅超管。关单并释放时段；已支付订单自动全额退剩余部分",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "代客取消订单",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "取消原因",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.AdminCancelReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data.refund_due 为应退金额",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/api/admin/orders/{orderNo}/events": {
             "get": {
                 "security": [
@@ -497,6 +695,91 @@
                     },
                     "201": {
                         "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/orders/{orderNo}/reschedule": {
+            "post": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "仅超管。仅待接单/已受理/待上门可改；目标时段满员返回 2002",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "代客改期",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "新日期与新时段",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.AdminRescheduleReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/password": {
+            "patch": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "需验证旧密码；改后建议重新登录",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "修改自己的密码",
+                "parameters": [
+                    {
+                        "description": "旧密码与新密码",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.ChangeMyPwdReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
                         }
@@ -2112,6 +2395,19 @@
         }
     },
     "definitions": {
+        "github_com_alinger_community-handyman_server_internal_dto.AdminCancelReq": {
+            "type": "object",
+            "required": [
+                "reason"
+            ],
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "example": "用户来电要求取消"
+                }
+            }
+        },
         "github_com_alinger_community-handyman_server_internal_dto.AdminLoginReq": {
             "type": "object",
             "required": [
@@ -2128,6 +2424,24 @@
                     "type": "string",
                     "maxLength": 32,
                     "example": "admin"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.AdminRescheduleReq": {
+            "type": "object",
+            "required": [
+                "service_date",
+                "slot_code"
+            ],
+            "properties": {
+                "service_date": {
+                    "type": "string",
+                    "example": "2026-11-21"
+                },
+                "slot_code": {
+                    "type": "string",
+                    "maxLength": 16,
+                    "example": "10-12"
                 }
             }
         },
@@ -2163,6 +2477,26 @@
                     "type": "string",
                     "maxLength": 200,
                     "example": "临时有事"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.ChangeMyPwdReq": {
+            "type": "object",
+            "required": [
+                "new_password",
+                "old_password"
+            ],
+            "properties": {
+                "new_password": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 6,
+                    "example": "new-password"
+                },
+                "old_password": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "example": "old-password"
                 }
             }
         },
@@ -2241,6 +2575,35 @@
                 "lane": {
                     "type": "string",
                     "maxLength": 64
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.CreateAdminReq": {
+            "type": "object",
+            "required": [
+                "password",
+                "role",
+                "username"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 6,
+                    "example": "your-password"
+                },
+                "role": {
+                    "type": "string",
+                    "enum": [
+                        "admin",
+                        "operator"
+                    ],
+                    "example": "operator"
+                },
+                "username": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "example": "operator01"
                 }
             }
         },
@@ -2431,6 +2794,33 @@
                     "type": "string",
                     "maxLength": 200,
                     "example": "当天排期满"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.ResetAdminPwdReq": {
+            "type": "object",
+            "required": [
+                "password"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "minLength": 6,
+                    "example": "new-password"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.SetAdminStatusReq": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "integer",
+                    "enum": [
+                        0,
+                        1
+                    ],
+                    "example": 0
                 }
             }
         },

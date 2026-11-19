@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   listOrders, listProviders, assignOrder, refund, redeem, quote,
   listOrderEvents, listOrderRecords, fetchRecordBlobUrl, exportOrdersUrl,
+  cancelOrderForUser, rescheduleOrder,
   type Order, type ProviderOption, type OrderQuery, type AdminEvent, type AdminRecord, ApiError,
 } from '@/api'
 import { useAuthStore } from '@/store/auth'
@@ -227,6 +228,71 @@ async function doQuote() {
   }
 }
 
+// ---- 代客取消 / 改期 ----
+const ADMIN_CANCELABLE = ['pending_payment', 'pending_accept', 'accepted', 'on_the_way']
+const adminCancelable = (s: string) => ADMIN_CANCELABLE.includes(s)
+
+const cancelVisible = ref(false)
+const cancelForm = reactive({ orderNo: '', reason: '' })
+const canceling = ref(false)
+function openCancel(o: Order) {
+  cancelForm.orderNo = o.order_no
+  cancelForm.reason = ''
+  cancelVisible.value = true
+}
+async function doCancel() {
+  if (!cancelForm.reason.trim()) {
+    ElMessage.warning('请填写取消原因')
+    return
+  }
+  canceling.value = true
+  try {
+    const res = await cancelOrderForUser(cancelForm.orderNo, cancelForm.reason.trim())
+    if (res.canceled && res.refund_due > 0 && res.refund_ok) {
+      ElMessage.success(`已取消并全额退款 ¥${(res.refund_due / 100).toFixed(2)}`)
+    } else if (res.canceled && res.refund_due > 0 && !res.refund_ok) {
+      ElMessage.warning(res.refund_hint || '订单已取消，退款处理失败，请到财务管理检查退款单')
+    } else {
+      ElMessage.success('订单已取消')
+    }
+    cancelVisible.value = false
+    load()
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    canceling.value = false
+  }
+}
+
+const RESLOT_OPTIONS = ['08-10', '10-12', '12-14', '14-16', '16-18', '18-20']
+const rescheduleVisible = ref(false)
+const rescheduleForm = reactive({ orderNo: '', cur: '', date: '', slot: '' })
+const rescheduling = ref(false)
+function openReschedule(o: Order) {
+  rescheduleForm.orderNo = o.order_no
+  rescheduleForm.cur = `${o.service_date} ${o.slot_code}`
+  rescheduleForm.date = ''
+  rescheduleForm.slot = ''
+  rescheduleVisible.value = true
+}
+async function doReschedule() {
+  if (!rescheduleForm.date || !rescheduleForm.slot) {
+    ElMessage.warning('请选择新日期与新时段')
+    return
+  }
+  rescheduling.value = true
+  try {
+    await rescheduleOrder(rescheduleForm.orderNo, rescheduleForm.date, rescheduleForm.slot)
+    ElMessage.success('改期成功')
+    rescheduleVisible.value = false
+    load()
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    rescheduling.value = false
+  }
+}
+
 const title = computed(() => `${auth.username || '运营'} · 订单管理`)
 
 // ---- CSV 导出（带当前筛选条件）----
@@ -301,10 +367,12 @@ async function onExport() {
           {{ row.address?.contact_name || '-' }} {{ row.address?.contact_phone || '' }}
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="300" fixed="right">
+      <el-table-column label="操作" width="360" fixed="right">
         <template #default="{ row }">
           <el-button link type="primary" @click="openDetail(row)">详情</el-button>
           <el-button v-if="row.status === 'pending_accept'" link type="primary" @click="openAssign(row)">派单</el-button>
+          <el-button v-if="adminCancelable(row.status)" link type="warning" @click="openReschedule(row)">改期</el-button>
+          <el-button v-if="adminCancelable(row.status)" link type="danger" @click="openCancel(row)">代客取消</el-button>
           <el-button v-if="row.plan === 'monthly' && row.status !== 'canceled'" link type="primary" @click="openRedeem(row)">核销</el-button>
           <el-button v-if="row.status === 'pending_accept' && row.total_amount === 0" link type="primary" @click="openQuote(row)">历史报价</el-button>
           <el-button v-if="row.paid_amount > 0 && !['canceled', 'completed'].includes(row.status)" link type="danger" @click="openRefund(row)">退款</el-button>
@@ -468,6 +536,38 @@ async function onExport() {
       <template #footer>
         <el-button @click="quoteVisible = false">取消</el-button>
         <el-button type="primary" @click="doQuote">提交报价</el-button>
+      </template>
+    </el-dialog>
+    <!-- 代客取消 -->
+    <el-dialog v-model="cancelVisible" title="代客取消" width="460px">
+      <p class="dialog-hint">订单：{{ cancelForm.orderNo }}。关单并释放时段；已支付订单将自动全额退剩余部分。</p>
+      <el-form label-width="90px">
+        <el-form-item label="取消原因">
+          <el-input v-model="cancelForm.reason" type="textarea" :rows="3" placeholder="必填，将写入订单轨迹" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="cancelVisible = false">取消</el-button>
+        <el-button type="danger" :loading="canceling" @click="doCancel">确认取消订单</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 代客改期 -->
+    <el-dialog v-model="rescheduleVisible" title="代客改期" width="440px">
+      <p class="dialog-hint">订单：{{ rescheduleForm.orderNo }}<br />当前时段：{{ rescheduleForm.cur }}。目标时段需已开放且有剩余名额。</p>
+      <el-form label-width="90px">
+        <el-form-item label="新日期">
+          <el-date-picker v-model="rescheduleForm.date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="新时段">
+          <el-select v-model="rescheduleForm.slot" style="width: 100%">
+            <el-option v-for="s in RESLOT_OPTIONS" :key="s" :label="s" :value="s" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="rescheduleVisible = false">取消</el-button>
+        <el-button type="primary" :loading="rescheduling" @click="doReschedule">确认改期</el-button>
       </template>
     </el-dialog>
   </div>

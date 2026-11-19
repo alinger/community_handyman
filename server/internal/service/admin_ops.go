@@ -2,13 +2,16 @@ package service
 
 import (
 	"context"
+	"strings"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
 	"github.com/alinger/community-handyman/server/internal/dto"
 	"github.com/alinger/community-handyman/server/internal/errs"
 	"github.com/alinger/community-handyman/server/internal/model"
+	"github.com/alinger/community-handyman/server/pkg/util"
 )
 
 // 本文件是运营后台的扩展能力：财务流水、用户管理、看板统计、
@@ -394,4 +397,263 @@ func (s *AdminService) CopySlots(ctx context.Context, sourceDate string, targetD
 		}
 	}
 	return applied, nil
+}
+
+// ---------- 后台账号管理 ----------
+
+// ListAdminAccounts 后台账号列表（仅超管调用）。
+func (s *AdminService) ListAdminAccounts(ctx context.Context) ([]dto.AdminAccountRow, error) {
+	var list []model.AdminUser
+	if err := s.db.WithContext(ctx).Order("id").Find(&list).Error; err != nil {
+		return nil, errs.Wrap(errs.CodeInternal, err)
+	}
+	out := make([]dto.AdminAccountRow, 0, len(list))
+	for _, a := range list {
+		out = append(out, dto.AdminAccountRow{
+			ID: a.ID, Username: a.Username, Role: a.Role, Status: a.Status, CreatedAt: a.CreatedAt,
+		})
+	}
+	return out, nil
+}
+
+// CreateAdminAccount 新建后台账号。用户名唯一，密码 bcrypt 落库。
+func (s *AdminService) CreateAdminAccount(ctx context.Context, username, password, role string) (*dto.AdminAccountRow, error) {
+	username = strings.TrimSpace(username)
+	if username == "" || len(password) < 6 {
+		return nil, errs.BizMsg(errs.CodeInvalidParam, "用户名不能为空，密码至少 6 位")
+	}
+	if role != "admin" && role != "operator" {
+		return nil, errs.BizMsg(errs.CodeInvalidParam, "role 只能是 admin 或 operator")
+	}
+	var n int64
+	if err := s.db.WithContext(ctx).Model(&model.AdminUser{}).
+		Where("username = ?", username).Count(&n).Error; err != nil {
+		return nil, errs.Wrap(errs.CodeInternal, err)
+	}
+	if n > 0 {
+		return nil, errs.BizMsg(errs.CodeInvalidParam, "用户名已存在")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, errs.Wrap(errs.CodeInternal, err)
+	}
+	a := &model.AdminUser{Username: username, PasswordHash: string(hash), Role: role, Status: 1}
+	if err := s.db.WithContext(ctx).Create(a).Error; err != nil {
+		return nil, errs.Wrap(errs.CodeInternal, err)
+	}
+	return &dto.AdminAccountRow{ID: a.ID, Username: a.Username, Role: a.Role, Status: a.Status, CreatedAt: a.CreatedAt}, nil
+}
+
+// SetAdminAccountStatus 启停后台账号。不能停用自己，避免超管把自己锁在门外。
+func (s *AdminService) SetAdminAccountStatus(ctx context.Context, id, operatorID uint64, status int8) error {
+	if status != 0 && status != 1 {
+		return errs.BizMsg(errs.CodeInvalidParam, "status 只能是 0 或 1")
+	}
+	if id == operatorID {
+		return errs.BizMsg(errs.CodeInvalidParam, "不能停用自己的账号")
+	}
+	res := s.db.WithContext(ctx).Model(&model.AdminUser{}).
+		Where("id = ?", id).Update("status", status)
+	if res.Error != nil {
+		return errs.Wrap(errs.CodeInternal, res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return errs.Biz(errs.CodeNotFound)
+	}
+	return nil
+}
+
+// ResetAdminAccountPassword 超管重置某账号密码。
+func (s *AdminService) ResetAdminAccountPassword(ctx context.Context, id uint64, password string) error {
+	if len(password) < 6 {
+		return errs.BizMsg(errs.CodeInvalidParam, "密码至少 6 位")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return errs.Wrap(errs.CodeInternal, err)
+	}
+	res := s.db.WithContext(ctx).Model(&model.AdminUser{}).
+		Where("id = ?", id).Update("password_hash", string(hash))
+	if res.Error != nil {
+		return errs.Wrap(errs.CodeInternal, res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return errs.Biz(errs.CodeNotFound)
+	}
+	return nil
+}
+
+// ChangeMyPassword 自助修改密码：先验旧密码，再写新哈希。
+func (s *AdminService) ChangeMyPassword(ctx context.Context, adminID uint64, oldPwd, newPwd string) error {
+	if len(newPwd) < 6 {
+		return errs.BizMsg(errs.CodeInvalidParam, "新密码至少 6 位")
+	}
+	var a model.AdminUser
+	if err := s.db.WithContext(ctx).First(&a, adminID).Error; err != nil {
+		return errs.Wrap(errs.CodeInternal, err)
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(a.PasswordHash), []byte(oldPwd)); err != nil {
+		return errs.BizMsg(errs.CodeUnauthorized, "旧密码不正确")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPwd), bcrypt.DefaultCost)
+	if err != nil {
+		return errs.Wrap(errs.CodeInternal, err)
+	}
+	return s.db.WithContext(ctx).Model(&model.AdminUser{}).
+		Where("id = ?", adminID).Update("password_hash", string(hash)).Error
+}
+
+// ---------- 代客取消 / 改期 ----------
+
+// cancelableStatuses 运营可介入关单的状态。
+func cancelableStatuses() []model.OrderStatus {
+	return []model.OrderStatus{
+		model.OrderPendingPayment, model.OrderPendingAccept,
+		model.OrderAccepted, model.OrderOnTheWay,
+	}
+}
+
+// CancelForUser 运营代客取消：关单、释放时段、写节点。
+// 返回应退金额（未支付为 0），退款由 handler 调 RefundService 完成原路退回。
+func (s *AdminService) CancelForUser(ctx context.Context, adminID uint64, orderNo, reason string) (int64, error) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return 0, errs.BizMsg(errs.CodeInvalidParam, "请填写取消原因")
+	}
+	o, err := s.orders.GetByNo(ctx, orderNo)
+	if err != nil {
+		return 0, errs.Wrap(errs.CodeInternal, err)
+	}
+	if o == nil {
+		return 0, errs.Biz(errs.CodeNotFound)
+	}
+	if o.Status.Terminal() {
+		return 0, errs.BizMsg(errs.CodeIllegalStatus, "订单已结束，无法取消")
+	}
+
+	cancelable := false
+	for _, st := range cancelableStatuses() {
+		if o.Status == st {
+			cancelable = true
+			break
+		}
+	}
+	if !cancelable {
+		return 0, errs.BizMsg(errs.CodeIllegalStatus, "服务已开始或待确认，不能代客取消")
+	}
+
+	// 服务开始的订单不能关（未支付单除外：本就未占用履约）
+	if o.Status != model.OrderPendingPayment {
+		start, err := util.SlotStart(o.ServiceDate.Time(), o.SlotCode)
+		if err != nil {
+			return 0, errs.Wrap(errs.CodeInternal, err)
+		}
+		if !time.Now().Before(start) {
+			return 0, errs.BizMsg(errs.CodeIllegalStatus, "服务已开始，不能代客取消")
+		}
+	}
+
+	remark := "运营代客取消：" + reason
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		ok, err := s.orders.WithTx(tx).UpdateStatus(ctx, o.ID, o.Status, model.OrderCanceled,
+			map[string]any{"cancel_reason": remark})
+		if err != nil {
+			return errs.Wrap(errs.CodeInternal, err)
+		}
+		if !ok {
+			return errs.Biz(errs.CodeIllegalStatus)
+		}
+		if err := s.slots.WithTx(tx).Release(ctx, o.ServiceDate, o.SlotCode, o.ServiceType); err != nil {
+			return errs.Wrap(errs.CodeInternal, err)
+		}
+		return s.orders.WithTx(tx).AddEvent(ctx, &model.OrderEvent{
+			OrderID:    o.ID,
+			Node:       string(model.OrderCanceled),
+			Operator:   "admin",
+			OperatorID: &adminID,
+			Remark:     remark,
+		})
+	})
+	if err != nil {
+		return 0, err
+	}
+	return o.Refundable(), nil
+}
+
+// Reschedule 运营代客改期：校验目标时段余量，同事务内释放旧时段、占用新时段。
+func (s *AdminService) Reschedule(ctx context.Context, adminID uint64, orderNo, dateStr, slotCode string) error {
+	o, err := s.orders.GetByNo(ctx, orderNo)
+	if err != nil {
+		return errs.Wrap(errs.CodeInternal, err)
+	}
+	if o == nil {
+		return errs.Biz(errs.CodeNotFound)
+	}
+	switch o.Status {
+	case model.OrderPendingAccept, model.OrderAccepted, model.OrderOnTheWay:
+	default:
+		return errs.BizMsg(errs.CodeIllegalStatus, "仅待接单/已受理/待上门的订单可改期")
+	}
+
+	newDate, err := model.ParseDate(dateStr)
+	if err != nil {
+		return errs.BizMsg(errs.CodeInvalidParam, "日期格式应为 2006-01-02")
+	}
+	// 不能改到过去，也不能晚于今天 +90 天
+	today, _ := model.ParseDate(time.Now().Format("2006-01-02"))
+	if newDate.Time().Before(today.Time()) {
+		return errs.BizMsg(errs.CodeInvalidParam, "不能改到过去的日期")
+	}
+	if newDate.Time().After(today.Time().AddDate(0, 0, 90)) {
+		return errs.BizMsg(errs.CodeInvalidParam, "改期不能超过 90 天")
+	}
+
+	// 目标时段必须开放且有剩余名额
+	slot, err := s.slots.Get(ctx, newDate, slotCode, o.ServiceType)
+	if err != nil {
+		return errs.Wrap(errs.CodeInternal, err)
+	}
+	if slot == nil || !slot.Available() {
+		return errs.Biz(errs.CodeSlotFull)
+	}
+
+	sameSlot := o.ServiceDate.Time().Equal(newDate.Time()) && o.SlotCode == slotCode
+	if sameSlot {
+		return errs.BizMsg(errs.CodeInvalidParam, "新时段与当前相同")
+	}
+
+	remark := "运营代客改期：" + o.ServiceDate.Time().Format("2006-01-02") + " " + o.SlotCode +
+		" → " + dateStr + " " + slotCode
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// 先占新时段：名额被别人抢走时整体回滚
+		reserved, err := s.slots.WithTx(tx).Reserve(ctx, newDate, slotCode, o.ServiceType)
+		if err != nil {
+			return errs.Wrap(errs.CodeInternal, err)
+		}
+		if !reserved {
+			return errs.Biz(errs.CodeSlotFull)
+		}
+		if err := s.slots.WithTx(tx).Release(ctx, o.ServiceDate, o.SlotCode, o.ServiceType); err != nil {
+			return errs.Wrap(errs.CodeInternal, err)
+		}
+		res := tx.Model(&model.Order{}).Where("id = ? AND status = ?", o.ID, o.Status).
+			Updates(map[string]any{
+				"service_date": newDate.Time(),
+				"slot_code":    slotCode,
+				"updated_at":   time.Now(),
+			})
+		if res.Error != nil {
+			return errs.Wrap(errs.CodeInternal, res.Error)
+		}
+		if res.RowsAffected == 0 {
+			return errs.Biz(errs.CodeIllegalStatus)
+		}
+		return s.orders.WithTx(tx).AddEvent(ctx, &model.OrderEvent{
+			OrderID:    o.ID,
+			Node:       string(o.Status),
+			Operator:   "admin",
+			OperatorID: &adminID,
+			Remark:     remark,
+		})
+	})
 }

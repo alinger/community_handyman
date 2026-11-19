@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Odometer, Location, Calendar, PriceTag, SwitchButton, Avatar,
-  DataLine, Wallet, User, Ticket,
+  DataLine, Wallet, User, Ticket, Lock, UserFilled,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/auth'
+import { changeMyPassword, ApiError } from '@/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -21,10 +22,38 @@ const menus = [
   { path: '/areas', title: '服务范围', icon: Location },
   { path: '/slots', title: '时段库存', icon: Calendar },
   { path: '/skus', title: '服务与价格', icon: PriceTag },
+  { path: '/accounts', title: '账号管理', icon: UserFilled },
 ]
-const active = computed(() => route.path)
+const visibleMenus = computed(() =>
+  menus.filter((m) => m.path !== '/accounts' || auth.isAdmin))
 
+const active = computed(() => route.path)
 const pageTitle = computed(() => (route.meta.title as string) || '运营后台')
+
+// ---- 自助修改密码 ----
+const pwdVisible = ref(false)
+const pwdForm = reactive({ old: '', next: '' })
+const pwdSaving = ref(false)
+function openPwd() {
+  Object.assign(pwdForm, { old: '', next: '' })
+  pwdVisible.value = true
+}
+async function doPwd() {
+  if (pwdForm.next.length < 6) {
+    ElMessage.warning('新密码至少 6 位')
+    return
+  }
+  pwdSaving.value = true
+  try {
+    await changeMyPassword(pwdForm.old, pwdForm.next)
+    ElMessage.success('密码已修改，下次登录请使用新密码')
+    pwdVisible.value = false
+  } catch (e) {
+    if (e instanceof ApiError) ElMessage.error(e.message)
+  } finally {
+    pwdSaving.value = false
+  }
+}
 
 async function onLogout() {
   try {
@@ -51,7 +80,7 @@ async function onLogout() {
         text-color="#cfe4e1"
         active-text-color="#ffffff"
       >
-        <el-menu-item v-for="m in menus" :key="m.path" :index="m.path">
+        <el-menu-item v-for="m in visibleMenus" :key="m.path" :index="m.path">
           <el-icon><component :is="m.icon" /></el-icon>
           <span>{{ m.title }}</span>
         </el-menu-item>
@@ -65,6 +94,8 @@ async function onLogout() {
           <el-icon><Avatar /></el-icon>
           <span>{{ auth.username || '管理员' }}</span>
           <el-tag v-if="auth.isAdmin" size="small" type="success">超管</el-tag>
+          <el-button link :icon="Lock" @click="openPwd">改密</el-button>
+          <el-button link :icon="UserFilled" @click="router.push('/accounts')" v-if="auth.isAdmin">账号</el-button>
           <el-button link :icon="SwitchButton" @click="onLogout">退出</el-button>
         </div>
       </el-header>
@@ -73,6 +104,18 @@ async function onLogout() {
       </el-main>
     </el-container>
   </el-container>
+
+  <!-- 自助修改密码 -->
+  <el-dialog v-model="pwdVisible" title="修改密码" width="420px">
+    <el-form label-width="90px">
+      <el-form-item label="旧密码"><el-input v-model="pwdForm.old" show-password /></el-form-item>
+      <el-form-item label="新密码"><el-input v-model="pwdForm.next" show-password placeholder="至少 6 位" /></el-form-item>
+    </el-form>
+    <template #footer>
+      <el-button @click="pwdVisible = false">取消</el-button>
+      <el-button type="primary" :loading="pwdSaving" @click="doPwd">确认修改</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>

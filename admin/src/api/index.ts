@@ -380,3 +380,34 @@ export const exportOrdersUrl = (q: { status?: string; service_type?: string; key
   })
   return `/api/admin/export/orders?${p.toString()}`
 }
+
+// ---------- 后台账号管理 ----------
+
+export interface AdminAccount {
+  id: number
+  username: string
+  role: string
+  status: number
+  created_at: string
+}
+export const listAccounts = () => request<AdminAccount[]>('/api/admin/accounts')
+export const createAccount = (username: string, password: string, role: 'admin' | 'operator') =>
+  request<AdminAccount>('/api/admin/accounts', 'POST', { username, password, role })
+export const setAccountStatus = (id: number, status: 0 | 1) =>
+  request<{ id: number; status: number }>(`/api/admin/accounts/${id}/status`, 'PATCH', { status })
+export const resetAccountPassword = (id: number, password: string) =>
+  request<{ id: number }>(`/api/admin/accounts/${id}/password`, 'PATCH', { password })
+export const changeMyPassword = (oldPassword: string, newPassword: string) =>
+  request<{ changed: boolean }>('/api/admin/password', 'PATCH', {
+    old_password: oldPassword,
+    new_password: newPassword,
+  })
+
+// ---------- 代客取消 / 改期 ----------
+
+export const cancelOrderForUser = (orderNo: string, reason: string) =>
+  request<{ canceled: boolean; refund_due: number; refund_ok?: boolean; refund_hint?: string }>(
+    `/api/admin/orders/${orderNo}/cancel`, 'POST', { reason })
+export const rescheduleOrder = (orderNo: string, serviceDate: string, slotCode: string) =>
+  request<{ rescheduled: boolean; service_date: string; slot_code: string }>(
+    `/api/admin/orders/${orderNo}/reschedule`, 'POST', { service_date: serviceDate, slot_code: slotCode })

@@ -97,6 +97,13 @@ curl http://127.0.0.1:8080/healthz
 | PUT | `/api/admin/areas/:id` | 修改服务范围规则 |
 | POST | `/api/admin/slots/copy` | 时段模板复制（源日配置 → 多个目标日期） |
 | GET | `/api/admin/export/orders` | 订单 CSV 导出（同列表筛选，带 BOM） |
+| GET | `/api/admin/accounts` | 后台账号列表（**仅超管**） |
+| POST | `/api/admin/accounts` | 新建后台账号（operator/admin，**仅超管**） |
+| PATCH | `/api/admin/accounts/:id/status` | 启停后台账号（不能停用自己，**仅超管**） |
+| PATCH | `/api/admin/accounts/:id/password` | 重置账号密码（**仅超管**） |
+| PATCH | `/api/admin/password` | 自助修改密码（需验证旧密码） |
+| POST | `/api/admin/orders/:orderNo/cancel` | 代客取消（**仅超管**；关单释放时段并自动全额退剩余） |
+| POST | `/api/admin/orders/:orderNo/reschedule` | 代客改期（**仅超管**；校验目标时段余量，同事务换占） |
 
 除登录与回调外均需 `X-User-Id` 头（接入微信登录后改为 JWT，只改 `middleware.RequireUser`）。
 

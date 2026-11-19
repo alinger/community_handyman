@@ -35,9 +35,9 @@ docs/                产品文档、设计稿与页面截图
 |---|---|---|---|---|---|
 | ![](docs/screenshots-admin/01-登录.jpg) | ![](docs/screenshots-admin/02-订单管理.jpg) | ![](docs/screenshots-admin/03-服务范围.jpg) | ![](docs/screenshots-admin/04-时段库存.jpg) | ![](docs/screenshots-admin/05-服务与价格.jpg) | ![](docs/screenshots-admin/06-派单弹层.jpg) |
 
-| 数据看板 | 财务管理 | 退款单 | 用户管理 | 订单详情(轨迹/记录) | 月卡核销 | 模板复制 |
-|---|---|---|---|---|---|---|
-| ![](docs/screenshots-admin/07-数据看板.jpg) | ![](docs/screenshots-admin/08-财务管理.jpg) | ![](docs/screenshots-admin/09-退款单.jpg) | ![](docs/screenshots-admin/10-用户管理.jpg) | ![](docs/screenshots-admin/11-订单详情-轨迹与记录.jpg) | ![](docs/screenshots-admin/12-月卡核销.jpg) | ![](docs/screenshots-admin/13-时段模板复制.jpg) |
+| 数据看板 | 财务管理 | 退款单 | 用户管理 | 订单详情(轨迹/记录) | 月卡核销 | 模板复制 | 账号管理 |
+|---|---|---|---|---|---|---|---|
+| ![](docs/screenshots-admin/07-数据看板.jpg) | ![](docs/screenshots-admin/08-财务管理.jpg) | ![](docs/screenshots-admin/09-退款单.jpg) | ![](docs/screenshots-admin/10-用户管理.jpg) | ![](docs/screenshots-admin/11-订单详情-轨迹与记录.jpg) | ![](docs/screenshots-admin/12-月卡核销.jpg) | ![](docs/screenshots-admin/13-时段模板复制.jpg) | ![](docs/screenshots-admin/14-账号管理.jpg) |
 
 ## 快速开始
 
@@ -81,7 +81,7 @@ npm run dev       # 浏览器预览 http://127.0.0.1:5174，/api 走 vite proxy 
 npm run build     # 类型检查 + 生产构建到 dist/
 ```
 
-账号密码用 `cd server && make seed-admin user=admin`（密码读 `.env` 的 `ADMIN_PASSWORD`）。登录后可使用：数据看板（今日订单/流水/退款/待派单）、订单管理（查询/派单/退款/核销/历史报价/操作轨迹/服务记录查看/CSV 导出）、财务管理（支付流水与退款单跟踪）、用户管理（角色切换 user↔provider、封禁解封）、月卡核销记录、服务范围（新增/编辑/启停）、时段库存（含模板复制到未来日期）、服务价格与计价规则。退款仅超管角色可用。
+账号密码用 `cd server && make seed-admin user=admin`（密码读 `.env` 的 `ADMIN_PASSWORD`）。登录后可使用：数据看板（今日订单/流水/退款/待派单）、订单管理（查询/派单/退款/核销/历史报价/操作轨迹/服务记录查看/代客取消/代客改期/CSV 导出）、财务管理（支付流水与退款单跟踪）、用户管理（角色切换 user↔provider、封禁解封）、月卡核销记录、服务范围（新增/编辑/启停）、时段库存（含模板复制到未来日期）、服务价格与计价规则、后台账号管理（超管专属：新建账号/启停/重置密码，顶栏支持自助改密）。资金类操作（退款/代客取消/改期/账号管理）仅超管角色可用。
 
 接口文档：服务启动后访问 `/swagger/index.html`（生产环境自动关闭）。改动注解后执行 `make doc` 重新生成。
 

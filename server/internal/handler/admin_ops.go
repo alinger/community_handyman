@@ -11,6 +11,7 @@ import (
 
 	"github.com/alinger/community-handyman/server/internal/dto"
 	"github.com/alinger/community-handyman/server/internal/errs"
+	"github.com/alinger/community-handyman/server/internal/middleware"
 	"github.com/alinger/community-handyman/server/pkg/response"
 )
 
@@ -351,4 +352,188 @@ func (a *API) AdminExportOrders(c *gin.Context) {
 		})
 	}
 	w.Flush()
+}
+
+// ---------- 后台账号管理 ----------
+
+// AdminListAccounts 后台账号列表。
+// @Summary      后台账号列表
+// @Tags         运营后台
+// @Produce      json
+// @Success      200  {object}  response.Body
+// @Security     AdminToken
+// @Router       /api/admin/accounts [get]
+func (a *API) AdminListAccounts(c *gin.Context) {
+	list, err := a.Admin.ListAdminAccounts(c.Request.Context())
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, list)
+}
+
+// AdminCreateAccount 新建后台账号。
+// @Summary      新建后台账号
+// @Description  仅超管；角色 operator 只能做日常运营，admin 才能退款与账号管理
+// @Tags         运营后台
+// @Accept       json
+// @Produce      json
+// @Param        body  body  dto.CreateAdminReq  true  "账号信息"
+// @Success      201  {object}  response.Body
+// @Security     AdminToken
+// @Router       /api/admin/accounts [post]
+func (a *API) AdminCreateAccount(c *gin.Context) {
+	var req dto.CreateAdminReq
+	if !bindJSON(c, &req) {
+		return
+	}
+	row, err := a.Admin.CreateAdminAccount(c.Request.Context(), req.Username, req.Password, req.Role)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.Created(c, row)
+}
+
+// AdminSetAccountStatus 启停后台账号。
+// @Summary      启停后台账号
+// @Description  不能停用自己的账号；停用后该账号无法登录
+// @Tags         运营后台
+// @Accept       json
+// @Produce      json
+// @Param        id    path  int                     true  "账号 ID"
+// @Param        body  body  dto.SetAdminStatusReq   true  "1 启用 / 0 停用"
+// @Success      200  {object}  response.Body
+// @Security     AdminToken
+// @Router       /api/admin/accounts/{id}/status [patch]
+func (a *API) AdminSetAccountStatus(c *gin.Context) {
+	id := uint64(atoiDefault(c.Param("id"), 0))
+	if id == 0 {
+		response.Fail(c, errs.BizMsg(errs.CodeInvalidParam, "ID 不合法"))
+		return
+	}
+	var req dto.SetAdminStatusReq
+	if !bindJSON(c, &req) {
+		return
+	}
+	if err := a.Admin.SetAdminAccountStatus(c.Request.Context(), id, middleware.CurrentAdminID(c), req.Status); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{"id": id, "status": req.Status})
+}
+
+// AdminResetAccountPassword 重置账号密码。
+// @Summary      重置后台账号密码
+// @Tags         运营后台
+// @Accept       json
+// @Produce      json
+// @Param        id    path  int                    true  "账号 ID"
+// @Param        body  body  dto.ResetAdminPwdReq   true  "新密码"
+// @Success      200  {object}  response.Body
+// @Security     AdminToken
+// @Router       /api/admin/accounts/{id}/password [patch]
+func (a *API) AdminResetAccountPassword(c *gin.Context) {
+	id := uint64(atoiDefault(c.Param("id"), 0))
+	if id == 0 {
+		response.Fail(c, errs.BizMsg(errs.CodeInvalidParam, "ID 不合法"))
+		return
+	}
+	var req dto.ResetAdminPwdReq
+	if !bindJSON(c, &req) {
+		return
+	}
+	if err := a.Admin.ResetAdminAccountPassword(c.Request.Context(), id, req.Password); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{"id": id})
+}
+
+// AdminChangeMyPassword 自助修改密码。
+// @Summary      修改自己的密码
+// @Description  需验证旧密码；改后建议重新登录
+// @Tags         运营后台
+// @Accept       json
+// @Produce      json
+// @Param        body  body  dto.ChangeMyPwdReq  true  "旧密码与新密码"
+// @Success      200  {object}  response.Body
+// @Security     AdminToken
+// @Router       /api/admin/password [patch]
+func (a *API) AdminChangeMyPassword(c *gin.Context) {
+	var req dto.ChangeMyPwdReq
+	if !bindJSON(c, &req) {
+		return
+	}
+	if err := a.Admin.ChangeMyPassword(c.Request.Context(), middleware.CurrentAdminID(c),
+		req.OldPassword, req.NewPassword); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{"changed": true})
+}
+
+// ---------- 代客取消 / 改期 ----------
+
+// AdminCancelForUser 运营代客取消。
+// @Summary      代客取消订单
+// @Description  仅超管。关单并释放时段；已支付订单自动全额退剩余部分
+// @Tags         运营后台
+// @Accept       json
+// @Produce      json
+// @Param        orderNo  path  string             true  "订单号"
+// @Param        body     body  dto.AdminCancelReq true  "取消原因"
+// @Success      200  {object}  response.Body  "data.refund_due 为应退金额"
+// @Security     AdminToken
+// @Router       /api/admin/orders/{orderNo}/cancel [post]
+func (a *API) AdminCancelForUser(c *gin.Context) {
+	var req dto.AdminCancelReq
+	if !bindJSON(c, &req) {
+		return
+	}
+	refundDue, err := a.Admin.CancelForUser(c.Request.Context(),
+		middleware.CurrentAdminID(c), c.Param("orderNo"), req.Reason)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+
+	// 已支付：全额退剩余部分，失败如实告知
+	if refundDue > 0 {
+		rf, rerr := a.Refund.Refund(c.Request.Context(), c.Param("orderNo"), refundDue,
+			"运营代客取消", middleware.CurrentAdminID(c), "admin")
+		if rerr != nil {
+			response.OK(c, gin.H{"canceled": true, "refund_due": refundDue, "refund_ok": false,
+				"refund_hint": "订单已取消，退款处理失败，请到财务管理检查退款单"})
+			return
+		}
+		response.OK(c, gin.H{"canceled": true, "refund_due": refundDue, "refund_ok": true,
+			"out_refund_no": rf.OutRefundNo})
+		return
+	}
+	response.OK(c, gin.H{"canceled": true, "refund_due": 0})
+}
+
+// AdminReschedule 运营代客改期。
+// @Summary      代客改期
+// @Description  仅超管。仅待接单/已受理/待上门可改；目标时段满员返回 2002
+// @Tags         运营后台
+// @Accept       json
+// @Produce      json
+// @Param        orderNo  path  string                 true  "订单号"
+// @Param        body     body  dto.AdminRescheduleReq true  "新日期与新时段"
+// @Success      200  {object}  response.Body
+// @Security     AdminToken
+// @Router       /api/admin/orders/{orderNo}/reschedule [post]
+func (a *API) AdminReschedule(c *gin.Context) {
+	var req dto.AdminRescheduleReq
+	if !bindJSON(c, &req) {
+		return
+	}
+	if err := a.Admin.Reschedule(c.Request.Context(), middleware.CurrentAdminID(c),
+		c.Param("orderNo"), req.ServiceDate, req.SlotCode); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, gin.H{"rescheduled": true, "service_date": req.ServiceDate, "slot_code": req.SlotCode})
 }

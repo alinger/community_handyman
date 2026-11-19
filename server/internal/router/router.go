@@ -176,6 +176,8 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 			authedAdmin.GET("/orders/:orderNo/events", api.AdminOrderEvents)
 			authedAdmin.GET("/orders/:orderNo/records", api.AdminOrderRecords)
 			authedAdmin.GET("/records/:id/file", api.AdminRecordFile)
+			authedAdmin.POST("/orders/:orderNo/cancel", middleware.RequireAdminRole(), api.AdminCancelForUser)
+			authedAdmin.POST("/orders/:orderNo/reschedule", middleware.RequireAdminRole(), api.AdminReschedule)
 
 			// 看板与财务
 			authedAdmin.GET("/stats", api.AdminStats)
@@ -194,6 +196,17 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 
 			// 导出（静态路径放参数路由前注册，避免与 /orders/:orderNo 冲突）
 			authedAdmin.GET("/export/orders", api.AdminExportOrders)
+
+			// 后台账号管理：仅超管
+			accounts := authedAdmin.Group("/accounts", middleware.RequireAdminRole())
+			{
+				accounts.GET("", api.AdminListAccounts)
+				accounts.POST("", api.AdminCreateAccount)
+				accounts.PATCH("/:id/status", api.AdminSetAccountStatus)
+				accounts.PATCH("/:id/password", api.AdminResetAccountPassword)
+			}
+			// 自助改密：任意已登录后台账号
+			authedAdmin.PATCH("/password", api.AdminChangeMyPassword)
 
 			// 退款是资金操作，要求超管
 			authedAdmin.POST("/refunds", middleware.RequireAdminRole(), api.AdminRefund)

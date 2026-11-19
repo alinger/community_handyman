@@ -37,6 +37,8 @@ curl http://127.0.0.1:8080/healthz
 
 生产环境用 pm2 托管，见 `server/deployments/`。
 
+接口文档：服务启动后访问 `/swagger/index.html`（生产环境自动关闭）。改动注解后执行 `make doc` 重新生成。
+
 ## 技术栈
 
 | 层 | 选型 |

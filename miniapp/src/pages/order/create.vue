@@ -406,7 +406,9 @@ async function submit() {
   try {
     const res = await createOrder(payload)
     await startPay(res.order.order_no)
-    uni.redirectTo({ url: `/pages/order/detail?orderNo=${res.order.order_no}` })
+    // 用 navigateTo 保留页面栈，详情页原生导航栏才会显示返回箭头；
+    // redirectTo 会销毁预约页，栈里只剩详情页，左上角返回按钮消失。
+    uni.navigateTo({ url: `/pages/order/detail?orderNo=${res.order.order_no}` })
   } catch (e) {
     uni.showModal({
       title: '提交失败',

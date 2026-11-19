@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { getStats, type AdminStats } from '@/api'
 
@@ -24,6 +24,11 @@ const SERVICE_LABELS: Record<string, string> = {
   accompany: '陪诊',
 }
 const yuan = (fen: number) => `¥${(fen / 100).toFixed(2)}`
+
+// 趋势柱状：按组内最大值归一，最高 120px
+const maxOrders = computed(() => Math.max(1, ...(stats.value?.recent_days ?? []).map((d) => d.orders)))
+const maxGmv = computed(() => Math.max(1, ...(stats.value?.recent_days ?? []).map((d) => d.gmv)))
+const barH = (v: number, max: number) => `${Math.max(2, Math.round((v / max) * 120))}px`
 
 async function load() {
   loading.value = true
@@ -63,6 +68,40 @@ onMounted(load)
           <div class="stat-num warn">
             {{ stats?.pending_accept ?? '-' }} / {{ stats?.unassigned ?? '-' }}
           </div>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-row :gutter="16" class="mt">
+      <el-col :span="24">
+        <el-card>
+          <template #header>
+            <div class="card-head">
+              <span>近 7 日订单与流水趋势</span>
+              <span class="trend-legend">
+                <i class="lg lg-order" /> 订单数
+                <i class="lg lg-gmv" /> 流水
+              </span>
+            </div>
+          </template>
+          <div v-if="stats?.recent_days?.length" class="trend">
+            <div v-for="d in stats.recent_days" :key="d.date" class="trend-col">
+              <div class="bars">
+                <div
+                  class="bar bar-order" :style="{ height: barH(d.orders, maxOrders) }"
+                  :title="`${d.date} 订单 ${d.orders} 单`"
+                />
+                <div
+                  class="bar bar-gmv" :style="{ height: barH(d.gmv, maxGmv) }"
+                  :title="`${d.date} 流水 ${yuan(d.gmv)}`"
+                />
+              </div>
+              <div class="trend-num">{{ d.orders }}</div>
+              <div class="trend-gmv">{{ yuan(d.gmv) }}</div>
+              <div class="trend-date">{{ d.date.slice(5) }}</div>
+            </div>
+          </div>
+          <el-empty v-else description="暂无数据" :image-size="60" />
         </el-card>
       </el-col>
     </el-row>
@@ -127,4 +166,17 @@ onMounted(load)
 .dist-bar { flex: 1; }
 .dist-count { width: 32px; text-align: right; font-weight: 600; }
 .svc-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.trend { display: flex; justify-content: space-around; align-items: flex-end; min-height: 190px; padding-top: 8px; }
+.trend-col { text-align: center; width: 90px; }
+.bars { display: flex; gap: 6px; align-items: flex-end; justify-content: center; height: 122px; }
+.bar { width: 26px; border-radius: 4px 4px 0 0; }
+.bar-order { background: #0f7f78; }
+.bar-gmv { background: #e6b26e; }
+.trend-num { font-weight: 700; margin-top: 6px; }
+.trend-gmv { color: #b88230; font-size: 12px; }
+.trend-date { color: #9aa3ad; font-size: 12px; margin-top: 2px; }
+.trend-legend { font-size: 12px; color: #6b7280; display: flex; align-items: center; gap: 6px; }
+.lg { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 2px; }
+.lg-order { background: #0f7f78; }
+.lg-gmv { background: #e6b26e; }
 </style>

@@ -132,7 +132,10 @@ func (s *AdminService) OrderEvents(ctx context.Context, orderNo string) ([]dto.A
 // Stats 看板首页数据。今日口径按服务器本地时区的自然日。
 func (s *AdminService) Stats(ctx context.Context) (*dto.AdminStats, error) {
 	dayStart := time.Now().Truncate(24 * time.Hour)
-	st := &dto.AdminStats{StatusDist: []dto.AdminStatusCount{}, ServiceDist: []dto.AdminServiceCount{}}
+	st := &dto.AdminStats{
+		StatusDist: []dto.AdminStatusCount{}, ServiceDist: []dto.AdminServiceCount{},
+		RecentDays: []dto.AdminDayStat{},
+	}
 
 	type cnt struct {
 		C int64
@@ -205,6 +208,32 @@ func (s *AdminService) Stats(ctx context.Context) (*dto.AdminStats, error) {
 	}
 	for _, r := range vd {
 		st.ServiceDist = append(st.ServiceDist, dto.AdminServiceCount{ServiceType: r.ServiceType, Count: r.C})
+	}
+
+	// 近 7 日趋势：订单数按 created_at，GMV 按 paid_at；缺数的日子补零
+	type dayRow struct {
+		Day    time.Time
+		Orders int64
+		GMV    int64
+	}
+	weekAgo := dayStart.AddDate(0, 0, -6)
+	var rows []dayRow
+	if err := s.db.WithContext(ctx).Model(&model.Order{}).
+		Where("created_at >= ?", weekAgo).
+		Select("DATE(created_at) AS day, COUNT(*) AS orders, " +
+			"COALESCE(SUM(CASE WHEN paid_at IS NOT NULL THEN paid_amount ELSE 0 END),0) AS gmv").
+		Group("DATE(created_at)").Scan(&rows).Error; err != nil {
+		return nil, errs.Wrap(errs.CodeInternal, err)
+	}
+	byDay := make(map[string]dayRow, len(rows))
+	for _, r := range rows {
+		byDay[r.Day.Format("2006-01-02")] = r
+	}
+	for i := 6; i >= 0; i-- {
+		d := dayStart.AddDate(0, 0, -i)
+		key := d.Format("2006-01-02")
+		r := byDay[key]
+		st.RecentDays = append(st.RecentDays, dto.AdminDayStat{Date: key, Orders: r.Orders, GMV: r.GMV})
 	}
 	return st, nil
 }

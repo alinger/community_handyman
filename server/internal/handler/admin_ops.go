@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"github.com/alinger/community-handyman/server/internal/dto"
 	"github.com/alinger/community-handyman/server/internal/errs"
 	"github.com/alinger/community-handyman/server/internal/middleware"
+	"github.com/alinger/community-handyman/server/internal/model"
 	"github.com/alinger/community-handyman/server/pkg/response"
 )
 
@@ -326,32 +328,66 @@ func (a *API) AdminExportOrders(c *gin.Context) {
 		return
 	}
 
+	// 批量回填下单用户/服务方昵称（一次 IN 查询，防 N+1）
+	ids := make([]uint64, 0, len(list)*2)
+	for i := range list {
+		ids = append(ids, list[i].UserID)
+		if list[i].ProviderID != nil {
+			ids = append(ids, *list[i].ProviderID)
+		}
+	}
+	nick, _ := a.Admin.NicknameMap(c.Request.Context(), ids)
+
 	c.Header("Content-Type", "text/csv; charset=utf-8")
 	c.Header("Content-Disposition",
 		fmt.Sprintf("attachment; filename=orders_%s.csv", time.Now().Format("20060102_150405")))
 	// BOM：Excel 打开 UTF-8 CSV 不乱码
 	c.Writer.WriteString("\xEF\xBB\xBF")
 	w := csv.NewWriter(c.Writer)
-	_ = w.Write([]string{"订单号", "服务类型", "计划", "服务日期", "时段", "状态",
-		"总价(分)", "已付(分)", "已退(分)", "服务方ID", "创建时间", "完成时间", "取消原因"})
+	_ = w.Write([]string{"订单号", "服务类型", "套餐", "服务日期", "时段", "状态",
+		"总价(元)", "已付(元)", "已退(元)", "下单用户", "服务方",
+		"联系人", "联系电话", "服务地址", "就诊人", "就诊医院",
+		"创建时间", "支付时间", "完成时间", "取消原因"})
+	yuan := func(fen int64) string {
+		return strconv.FormatFloat(float64(fen)/100, 'f', 2, 64)
+	}
 	for _, o := range list {
-		finished := ""
-		if o.FinishedAt != nil {
-			finished = o.FinishedAt.Format("2006-01-02 15:04:05")
-		}
-		provider := ""
+		fin := tsOrEmpty(o.FinishedAt)
+		paid := tsOrEmpty(o.PaidAt)
+		prov := ""
 		if o.ProviderID != nil {
-			provider = strconv.FormatUint(*o.ProviderID, 10)
+			prov = nick[*o.ProviderID]
 		}
+		addr := parseAddrSnapshot(o.AddressSnapshot)
 		_ = w.Write([]string{
 			o.OrderNo, string(o.ServiceType), string(o.Plan),
 			o.ServiceDate.Time().Format("2006-01-02"), o.SlotCode, string(o.Status),
-			strconv.FormatInt(o.TotalAmount, 10), strconv.FormatInt(o.PaidAmount, 10),
-			strconv.FormatInt(o.RefundedAmount, 10), provider,
-			o.CreatedAt.Format("2006-01-02 15:04:05"), finished, o.CancelReason,
+			yuan(o.TotalAmount), yuan(o.PaidAmount), yuan(o.RefundedAmount),
+			nick[o.UserID], prov,
+			addr.ContactName, addr.ContactPhone,
+			addr.Community + " " + addr.HouseNo,
+			o.PatientName, o.Hospital,
+			o.CreatedAt.Format("2006-01-02 15:04:05"), paid, fin, o.CancelReason,
 		})
 	}
 	w.Flush()
+}
+
+// tsOrEmpty 时间指针格式化，nil 返回空串。
+func tsOrEmpty(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.Format("2006-01-02 15:04:05")
+}
+
+// parseAddrSnapshot 解析订单地址快照，失败返回零值。
+func parseAddrSnapshot(raw model.JSON) dto.AddressResp {
+	var a dto.AddressResp
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &a)
+	}
+	return a
 }
 
 // ---------- 后台账号管理 ----------

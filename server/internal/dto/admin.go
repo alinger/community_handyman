@@ -135,6 +135,7 @@ type AdminStats struct {
 	Providers     int64               `json:"providers"`
 	StatusDist    []AdminStatusCount  `json:"status_dist"`
 	ServiceDist   []AdminServiceCount `json:"service_dist"`
+	RecentDays    []AdminDayStat      `json:"recent_days"`
 }
 
 // AdminStatusCount 各状态订单数。
@@ -144,6 +145,13 @@ type AdminStatusCount struct {
 }
 
 // AdminServiceCount 各服务类型订单数（今日）。
+// AdminDayStat 近 N 日每日订单与 GMV（看板趋势）。
+type AdminDayStat struct {
+	Date   string `json:"date"`
+	Orders int64  `json:"orders"`
+	GMV    int64  `json:"gmv"`
+}
+
 type AdminServiceCount struct {
 	ServiceType string `json:"service_type"`
 	Count       int64  `json:"count"`

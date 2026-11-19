@@ -87,7 +87,7 @@ curl http://127.0.0.1:8080/healthz
 | GET | `/api/admin/orders/:orderNo/events` | 订单节点回放（操作轨迹） |
 | GET | `/api/admin/orders/:orderNo/records` | 后台查看服务记录 |
 | GET | `/api/admin/records/:id/file` | 后台下载/预览记录文件（鉴权 + Range） |
-| GET | `/api/admin/stats` | 运营看板（今日订单/流水/退款/待派单/状态分布） |
+| GET | `/api/admin/stats` | 运营看板（今日订单/流水/退款/待派单/状态分布）（含近 7 日订单/流水趋势） |
 | GET | `/api/admin/payments` | 支付流水分页（order_no / status 筛选） |
 | GET | `/api/admin/refunds` | 退款单分页（含操作人与退款状态跟踪） |
 | GET | `/api/admin/users` | 用户/服务方分页（role / keyword） |

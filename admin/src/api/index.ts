@@ -331,6 +331,7 @@ export interface AdminStats {
   providers: number
   status_dist: { status: string; count: number }[]
   service_dist: { service_type: string; count: number }[]
+  recent_days?: { date: string; orders: number; gmv: number }[]
 }
 export const getStats = () => request<AdminStats>('/api/admin/stats')
 

@@ -55,19 +55,10 @@ function goProviderWork() {
 /**
  * 切换身份视角。已认证用户既是住户也是服务方，
  * 这里切的是「看哪一侧」，不动后端权限。
+ * 胶囊按钮由 v-if="user.isProvider" 控制渲染，未认证时根本点不到。
  */
 function onSwitchView() {
-  if (!user.isProvider) {
-    uni.showModal({
-      title: '还没有服务方权限',
-      content: '需先提交资质认证，通过后即可切换为服务方接单',
-      confirmText: '去认证',
-      success: (r) => {
-        if (r.confirm) goProviderApply()
-      },
-    })
-    return
-  }
+  if (!user.isProvider) return
   user.toggleView()
 }
 </script>
@@ -78,7 +69,22 @@ function onSwitchView() {
     <view class="profile">
       <view class="avatar">{{ (user.nickname || '住')[0] }}</view>
       <view class="profile-info">
-        <view class="nickname">{{ user.nickname || '住户' }}</view>
+        <!-- 用户名后面放身份切换：只有已认证服务方才渲染 -->
+        <view class="name-row">
+          <text class="nickname">{{ user.nickname || '住户' }}</text>
+          <view
+            v-if="user.isProvider"
+            class="role-pill"
+            :class="{ provider: user.isProviderView }"
+            @tap.stop="onSwitchView"
+          >
+            <text class="pill-swap">⇅</text>
+            <text class="pill-text">{{ user.isProviderView ? '切为住户' : '切为服务方' }}</text>
+          </view>
+          <view v-else class="role-pill ghost" @tap.stop="goProviderApply">
+            <text class="pill-text">认证服务方</text>
+          </view>
+        </view>
         <view class="uid">
           ID {{ user.userId || '-' }}
           <text v-if="user.phone" class="phone">· {{ user.phone }}</text>
@@ -110,8 +116,8 @@ function onSwitchView() {
           <text class="chev">›</text>
         </view>
       </view>
-      <!-- 认证通过后身份就是服务方，这里直接进工作台；否则走认证申请 -->
-      <view v-if="user.role === 'provider'" class="menu-item" @tap="goProviderWork">
+      <!-- 认证通过后可在服务方视角直接进工作台；未认证走申请 -->
+      <view v-if="user.isProvider" class="menu-item" @tap="goProviderWork">
         <text>服务方工作台</text>
         <view class="menu-right">
           <text class="menu-value">已认证</text>
@@ -122,16 +128,6 @@ function onSwitchView() {
         <text>成为服务方</text>
         <view class="menu-right">
           <text class="menu-value">认证后接单</text>
-          <text class="chev">›</text>
-        </view>
-      </view>
-      <!-- 身份切换：已认证用户可在住户/服务方两个视角间来回切 -->
-      <view class="menu-item" @tap="onSwitchView">
-        <text>切换身份</text>
-        <view class="menu-right">
-          <text class="menu-value">
-            {{ user.isProvider ? (user.isProviderView ? '当前：服务方' : '当前：住户') : '需先认证' }}
-          </text>
           <text class="chev">›</text>
         </view>
       </view>
@@ -202,9 +198,76 @@ function onSwitchView() {
   min-width: 0;
 }
 
+/* 用户名 + 身份切换并排 */
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: 14rpx;
+  min-width: 0;
+}
+
 .nickname {
   font-size: 34rpx;
   font-weight: 600;
+  max-width: 260rpx;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 身份切换胶囊：已认证服务方显示，点击在两侧视角间切换 */
+.role-pill {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  height: 40rpx;
+  padding: 0 14rpx;
+  border-radius: 20rpx;
+  background: var(--brand-light);
+  border: 1rpx solid #b9ded8;
+  flex-shrink: 0;
+}
+
+.role-pill:active {
+  opacity: 0.75;
+}
+
+/* 处于服务方视角时反色，一眼能看出当前在哪一侧 */
+.role-pill.provider {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+.pill-swap {
+  font-size: 20rpx;
+  color: var(--brand-dark);
+  line-height: 1;
+}
+
+.role-pill.provider .pill-swap {
+  color: #fff;
+}
+
+.pill-text {
+  font-size: 20rpx;
+  color: var(--brand-dark);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.role-pill.provider .pill-text {
+  color: #fff;
+}
+
+/* 未认证：虚线弱化，提示可去认证 */
+.role-pill.ghost {
+  background: #fff;
+  border: 1rpx dashed #cfd8d6;
+}
+
+.role-pill.ghost .pill-text {
+  color: var(--text-sub);
+  font-weight: 400;
 }
 
 .uid {

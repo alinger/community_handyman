@@ -1,0 +1,41 @@
+# 本文件不含任何凭据。数据库连接由 .env 提供（程序启动自动加载）。
+# 需要临时切换库时在命令行前置环境变量即可，例如：
+#   MYSQL_DSN='root:pwd@tcp(127.0.0.1:3306)/other_db?...' make migrate-up
+
+.PHONY: help run build tidy fmt vet migrate-up migrate-down migrate-version seed-admin
+
+help:
+	@echo "make run                   启动 HTTP 服务"
+	@echo "make build                 编译到 bin/"
+	@echo "make migrate-up            执行迁移（读 .env）"
+	@echo "make migrate-down steps=1  回滚 N 步"
+	@echo "make migrate-version       查看当前版本"
+	@echo "make seed-admin user=admin 创建后台账号（密码读 .env 的 ADMIN_PASSWORD）"
+
+run:
+	go run ./cmd/api
+
+build:
+	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o bin/api ./cmd/api
+	CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o bin/migrate ./cmd/migrate
+
+tidy:
+	go mod tidy
+
+fmt:
+	gofmt -w .
+
+vet:
+	go vet ./...
+
+migrate-up:
+	go run ./cmd/migrate -cmd up
+
+migrate-down:
+	go run ./cmd/migrate -cmd down -steps $(steps)
+
+migrate-version:
+	go run ./cmd/migrate -cmd version
+
+seed-admin:
+	go run ./cmd/migrate -cmd seed-admin -username $(user)

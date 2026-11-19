@@ -1,0 +1,8 @@
+uploads/
+bin/
+*.log
+.env
+.env.*
+!.env.example
+configs/config.local.yaml
+.DS_Store

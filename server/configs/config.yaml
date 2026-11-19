@@ -1,0 +1,54 @@
+app:
+  name: community-handyman
+  env: dev
+
+server:
+  port: 8080
+  mode: debug
+  read_timeout: 15s
+  write_timeout: 30s
+  shutdown_timeout: 10s
+  allow_origins:
+    - http://localhost:5173
+    - http://localhost:8081
+
+database:
+  # 密钥走环境变量，配置文件里只留占位符；未设置时回落到默认本地 DSN
+  dsn: "${MYSQL_DSN}"
+  max_open_conns: 25
+  max_idle_conns: 10
+  conn_max_lifetime: 1h
+  log_sql: true
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: "${REDIS_PASSWORD}"
+  db: 0
+
+wechat:
+  app_id: "${WECHAT_APP_ID}"
+  mch_id: "${WECHAT_MCH_ID}"
+  serial_no: "${WECHAT_SERIAL_NO}"
+  api_v3_key: "${WECHAT_API_V3_KEY}"
+  private_key_path: "${WECHAT_PRIVATE_KEY_PATH}"
+  notify_url: "${WECHAT_NOTIFY_URL}"
+  refund_notify_url: "${WECHAT_REFUND_NOTIFY_URL}"
+
+auth:
+  secret: "${AUTH_SECRET}"
+  token_ttl: 12h
+
+payment:
+  # sandbox 本地联调；商户号与证书齐备后改为 wechat
+  provider: "sandbox"
+  sandbox_secret: "${PAYMENT_SANDBOX_SECRET}"
+
+storage:
+  # local 落本地目录，oss/cos/s3 接入云存储后切换
+  provider: "local"
+  local_dir: "./uploads"
+  endpoint: "${STORAGE_ENDPOINT}"
+  region: "${STORAGE_REGION}"
+  bucket: "${STORAGE_BUCKET}"
+  access_key: "${STORAGE_ACCESS_KEY}"
+  secret_key: "${STORAGE_SECRET_KEY}"

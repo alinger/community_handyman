@@ -269,11 +269,13 @@ function chooseUpload() {
 }
 
 async function doUpload(path: string) {
+  const orderNo = order.value?.order_no
+  if (!orderNo) return
   uploading.value = true
   try {
-    await uploadRecord(order.value.order_no, path, 'photo')
+    await uploadRecord(orderNo, path, 'photo')
     uni.showToast({ title: '已上传', icon: 'success' })
-    records.value = await listRecords(order.value.order_no)
+    records.value = await listRecords(orderNo)
   } catch (e) {
     uni.showToast({ title: e instanceof ApiError ? e.message : '上传失败', icon: 'none' })
   } finally {

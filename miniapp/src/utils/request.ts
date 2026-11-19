@@ -39,6 +39,8 @@ export class ApiError extends Error {
  * 小程序端没有 proxy，必须用完整地址（开发者工具里勾「不校验合法域名」）。
  * 真机联调时把 VITE_API_BASE 换成局域网 IP，例如 http://192.168.1.10:8080。
  */
+// uni/vite 在编译期把 process.env.UNI_PLATFORM 替换成常量，这里仅补类型声明（项目未引入 @types/node）
+declare const process: { env: Record<string, string | undefined> }
 const isH5 = process.env.UNI_PLATFORM === 'h5'
 export const BASE_URL =
   (import.meta.env.VITE_API_BASE as string) || (isH5 ? '' : 'http://127.0.0.1:8080')
@@ -86,7 +88,8 @@ export function request<T>(opts: RequestOptions): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     uni.request({
       url: BASE_URL + url,
-      method,
+      // uni 的 method 类型定义漏了 PATCH，底层 wx.request/XHR 实际支持，收窄到其声明范围
+      method: method as Exclude<RequestOptions['method'], 'PATCH'>,
       data,
       header,
       timeout: 15000,

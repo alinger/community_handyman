@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
+import CalendarPicker from '@/components/CalendarPicker.vue'
 import { createOrder, previewOrder, type CreateOrderPayload, type PreviewResp } from '@/api'
 import { useUserStore } from '@/store/user'
 import { availableSlots, nextDays, price, SLOTS } from '@/utils/format'
@@ -36,7 +37,7 @@ const form = reactive({
 const preview = ref<PreviewResp | null>(null)
 const previewError = ref('')
 const submitting = ref(false)
-const showTimePicker = ref(false)
+const showCalendar = ref(false)
 
 /** 顶部 banner 按服务类型切换文案 */
 const banner = computed(() => {
@@ -187,13 +188,9 @@ function chooseAddress() {
   })
 }
 
-function pickDate(v: string) {
-  form.serviceDate = v
-}
-
-function pickSlot(code: string) {
-  form.slotCode = code
-  showTimePicker.value = false
+function onConfirmTime(payload: { date: string; slot: string }) {
+  form.serviceDate = payload.date
+  form.slotCode = payload.slot
 }
 
 async function submit() {
@@ -203,8 +200,8 @@ async function submit() {
     return
   }
   if (!form.slotCode) {
-    uni.showToast({ title: '请选择时段', icon: 'none' })
-    showTimePicker.value = true
+    uni.showToast({ title: '请选择服务时间', icon: 'none' })
+    showCalendar.value = true
     return
   }
   if (form.serviceType === 'accompany' && !form.hospital) {
@@ -295,40 +292,12 @@ async function startPay(orderNo: string) {
       </view>
     </view>
 
-    <!-- 服务时间 -->
-    <view class="card">
+    <!-- 服务时间：点开日历选择 -->
+    <view class="card" @tap="showCalendar = true">
       <view class="f-label">服务时间</view>
-      <view class="f-value" :class="{ placeholder: !timeText }" @tap="showTimePicker = !showTimePicker">
+      <view class="f-value" :class="{ placeholder: !timeText }">
         <text class="f-text">{{ timeText || '请选择日期与时段' }}</text>
-        <text class="chev">{{ showTimePicker ? '⌃' : '›' }}</text>
-      </view>
-
-      <view v-if="showTimePicker" class="picker">
-        <scroll-view scroll-x class="dates" :show-scrollbar="false">
-          <view
-            v-for="d in dates"
-            :key="d.value"
-            class="date-chip"
-            :class="{ active: form.serviceDate === d.value }"
-            @tap.stop="pickDate(d.value)"
-          >
-            {{ d.label }}
-          </view>
-        </scroll-view>
-        <view class="slot-grid">
-          <view
-            v-for="s in slots"
-            :key="s.code"
-            class="slot-chip"
-            :class="{ active: form.slotCode === s.code }"
-            @tap.stop="pickSlot(s.code)"
-          >
-            {{ s.label }}
-          </view>
-        </view>
-        <view v-if="form.serviceType === 'dogwalk'" class="f-hint">
-          遛宠工作日仅开放晚间时段，周末全天可约
-        </view>
+        <text class="chev">›</text>
       </view>
     </view>
 
@@ -471,6 +440,14 @@ async function startPay(orderNo: string) {
       </view>
       <view class="foot-note">提交后可在「订单」中查看服务进度</view>
     </view>
+
+    <CalendarPicker
+      v-model:visible="showCalendar"
+      :date="form.serviceDate"
+      :slot="form.slotCode"
+      :service-type="form.serviceType"
+      @confirm="onConfirmTime"
+    />
   </view>
 </template>
 
@@ -600,14 +577,6 @@ async function startPay(orderNo: string) {
   transform-origin: right center;
 }
 
-/* 不设 flex-shrink:0 时，switch 在 flex 容器里会被压扁 */
-.sw {
-  flex-shrink: 0;
-  /* uni-app 的 switch 默认比其他控件小一圈，放大到与标签视觉等重 */
-  transform: scale(1.15);
-  transform-origin: right center;
-}
-
 .remark-input {
   margin-top: 16rpx;
   height: 76rpx;
@@ -615,56 +584,6 @@ async function startPay(orderNo: string) {
   border-radius: 12rpx;
   padding: 0 22rpx;
   font-size: 25rpx;
-}
-
-/* ---------- 选择器 ---------- */
-.picker {
-  margin-top: 20rpx;
-  padding-top: 20rpx;
-  border-top: 1rpx solid #f2f4f3;
-}
-
-.dates {
-  white-space: nowrap;
-  margin-bottom: 18rpx;
-}
-
-.date-chip {
-  display: inline-block;
-  padding: 12rpx 26rpx;
-  margin-right: 14rpx;
-  background: #f4f6f5;
-  border-radius: 30rpx;
-  font-size: 24rpx;
-  color: var(--text-sub);
-}
-
-.date-chip.active {
-  background: var(--brand);
-  color: #fff;
-  font-weight: 500;
-}
-
-.slot-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14rpx;
-}
-
-.slot-chip {
-  text-align: center;
-  padding: 16rpx 0;
-  border: 1rpx solid #e3e8e6;
-  border-radius: 12rpx;
-  font-size: 23rpx;
-  color: var(--text-sub);
-}
-
-.slot-chip.active {
-  border-color: var(--brand);
-  background: var(--brand-light);
-  color: var(--brand-dark);
-  font-weight: 500;
 }
 
 /* ---------- 胶囊 ---------- */

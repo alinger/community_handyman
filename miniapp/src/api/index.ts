@@ -103,6 +103,8 @@ export interface MonthlySummary {
 }
 
 export interface CreateOrderPayload {
+  /** 让本类型可作为通用 JSON 请求体（Record<string, unknown>）传给 request */
+  [key: string]: unknown
   address_id: number
   service_type: string
   plan?: string

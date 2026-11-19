@@ -22,7 +22,6 @@ const form = reactive({
   serviceDate: dates[0].value,
   slotCode: '',
   plan: 'single',
-  quantity: 1,
   garbageType: 'kitchen',
   petCount: 1,
   durationMin: 20,
@@ -66,9 +65,6 @@ const timeText = computed(() => {
   return [d?.label, s?.label].filter(Boolean).join(' ')
 })
 
-/** 数量单位随服务类型变化，设计稿里是「1 袋」 */
-const unitText = computed(() => (form.serviceType === 'garbage' ? '袋' : '只'))
-
 onLoad(async (query) => {
   if (query?.type && ['garbage', 'dogwalk', 'accompany'].includes(query.type)) {
     form.serviceType = query.type as string
@@ -102,7 +98,6 @@ watch(
     form.serviceDate,
     form.slotCode,
     form.plan,
-    form.quantity,
     form.petCount,
     form.durationMin,
     form.feedOnly,
@@ -128,7 +123,6 @@ function buildPayload(): CreateOrderPayload | null {
 
   if (form.serviceType === 'garbage') {
     payload.plan = form.plan
-    payload.quantity = form.quantity
     payload.garbage_type = form.garbageType
   } else if (form.serviceType === 'dogwalk') {
     payload.pet_count = form.petCount
@@ -329,18 +323,6 @@ async function startPay(orderNo: string) {
         </view>
       </view>
       <view class="f-hint">有害垃圾请按社区要求处理</view>
-    </view>
-
-    <!-- 数量（仅垃圾） -->
-    <view v-if="form.serviceType === 'garbage'" class="card">
-      <view class="f-row">
-        <view class="f-label">数量</view>
-        <view class="stepper">
-          <view class="step-btn" @tap="form.quantity = Math.max(1, form.quantity - 1)">−</view>
-          <text class="step-val">{{ form.quantity }} {{ unitText }}</text>
-          <view class="step-btn" @tap="form.quantity = Math.min(20, form.quantity + 1)">＋</view>
-        </view>
-      </view>
     </view>
 
     <!-- 遛宠参数 -->

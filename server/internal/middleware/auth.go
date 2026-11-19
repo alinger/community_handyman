@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -61,6 +62,45 @@ func CurrentUserRole(c *gin.Context) string {
 		}
 	}
 	return ""
+}
+
+// RoleLookup 按用户 ID 查当前角色，供 RequireProvider 判断真实权限。
+type RoleLookup func(ctx context.Context, userID uint64) (string, error)
+
+// RequireProvider 要求当前用户已被认证为服务方。
+//
+// 必须查库而不是只看 token 里的 role：
+// token 在登录时就固定了角色，服务方审核通过后旧 token 里仍是 user，
+// 若只看 token 会让刚通过认证的人用不了服务方端；
+// 反过来，若账号被降级，旧 token 也不会自动失效。
+// 以 users.role 为准才既正确又及时。
+func RequireProvider(lookup RoleLookup) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		uid := CurrentUserID(c)
+		if uid == 0 {
+			abortUnauthorized(c)
+			return
+		}
+		role, err := lookup(c.Request.Context(), uid)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, response.Body{
+				Code:      errs.CodeInternal,
+				Message:   errs.Message(errs.CodeInternal),
+				RequestID: c.GetString(response.CtxRequestID),
+			})
+			return
+		}
+		if role != auth.RoleProvider {
+			c.AbortWithStatusJSON(http.StatusForbidden, response.Body{
+				Code:      errs.CodeForbidden,
+				Message:   "尚未通过服务方认证",
+				RequestID: c.GetString(response.CtxRequestID),
+			})
+			return
+		}
+		c.Set(CtxUserRole, role)
+		c.Next()
+	}
 }
 
 // CurrentUserID 从 context 取当前用户。

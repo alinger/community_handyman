@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Odometer, Location, Calendar, PriceTag, SwitchButton, Avatar,
-  DataLine, Wallet, User, Ticket, Lock, UserFilled,
+  DataLine, Wallet, User, Ticket, Lock, UserFilled, Stamp,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/auth'
 import { changeMyPassword, ApiError } from '@/api'
@@ -18,6 +18,7 @@ const menus = [
   { path: '/orders', title: '订单管理', icon: Odometer },
   { path: '/finance', title: '财务管理', icon: Wallet },
   { path: '/users', title: '用户管理', icon: User },
+  { path: '/provider-apps', title: '服务方审核', icon: Stamp },
   { path: '/redemptions', title: '月卡核销', icon: Ticket },
   { path: '/areas', title: '服务范围', icon: Location },
   { path: '/slots', title: '时段库存', icon: Calendar },

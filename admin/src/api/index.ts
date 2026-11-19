@@ -428,3 +428,52 @@ export const cancelOrderForUser = (orderNo: string, reason: string) =>
 export const rescheduleOrder = (orderNo: string, serviceDate: string, slotCode: string) =>
   request<{ rescheduled: boolean; service_date: string; slot_code: string }>(
     `/api/admin/orders/${orderNo}/reschedule`, 'POST', { service_date: serviceDate, slot_code: slotCode })
+
+// ---------- 服务方资质审核 ----------
+
+export interface ProviderAppRow {
+  id: number
+  user_id: number
+  user_nickname: string
+  real_name: string
+  phone: string
+  service_type: string
+  experience: string
+  id_card_no: string
+  status: 'pending' | 'approved' | 'rejected'
+  status_label: string
+  review_note: string
+  reviewed_at: string
+  created_at: string
+  has_front: boolean
+  has_back: boolean
+  has_health: boolean
+}
+
+export const listProviderApps = (q: { status?: string; page?: number; size?: number }) => {
+  const p = new URLSearchParams()
+  Object.entries(q).forEach(([k, v]) => {
+    if (v !== undefined && v !== '') p.set(k, String(v))
+  })
+  return request<{ list: ProviderAppRow[]; total: number; page: number; size: number }>(
+    `/api/admin/provider-applications?${p.toString()}`,
+  )
+}
+
+export const providerAppStats = () =>
+  request<{ pending: number; approved: number; rejected: number }>(
+    '/api/admin/provider-applications/stats',
+  )
+
+export const providerAppDetail = (id: number) =>
+  request<ProviderAppRow>(`/api/admin/provider-applications/${id}`)
+
+export const approveProviderApp = (id: number) =>
+  request<{ approved: boolean }>(`/api/admin/provider-applications/${id}/approve`, 'POST')
+
+export const rejectProviderApp = (id: number, note: string) =>
+  request<{ rejected: boolean }>(`/api/admin/provider-applications/${id}/reject`, 'POST', { note })
+
+/** 附件直链：需要 Authorization，配合 fetch 转 blob 或带 header 打开 */
+export const providerCertUrl = (id: number, kind: 'front' | 'back' | 'health') =>
+  `/api/admin/provider-applications/${id}/cert/${kind}`

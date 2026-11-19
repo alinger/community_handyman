@@ -2,7 +2,9 @@
  * 接口封装。字段与 server/docs/swagger.json 保持一致，
  * 后端改字段时这里要同步，否则问题是运行期才暴露。
  */
-import { request, upload } from '@/utils/request'
+import {
+  request, upload, ApiError, BASE_URL, getToken, getUserId,
+} from '@/utils/request'
 
 export interface Address {
   id: number
@@ -350,6 +352,86 @@ export function listRecords(orderNo: string) {
 
 export function monthlyDetail(orderNo: string) {
   return request<MonthlySummary>({ url: `/api/v1/orders/${orderNo}/monthly` })
+}
+
+/* ---------- 服务方资质申请 ---------- */
+
+export interface ProviderApplication {
+  id: number
+  real_name: string
+  phone: string
+  service_type: string
+  experience: string
+  /** 已脱敏：310115********1234 */
+  id_card_no: string
+  status: 'pending' | 'approved' | 'rejected'
+  status_label: string
+  review_note: string
+  reviewed_at: string | null
+  created_at: string
+  has_front: boolean
+  has_back: boolean
+  has_health: boolean
+}
+
+/** 查当前认证状态，data 为 null 表示从未申请 */
+export function myProviderApplication() {
+  return request<ProviderApplication | null>({ url: '/api/v1/provider/application' })
+}
+
+export interface SubmitApplicationPayload {
+  /** 让本类型可作为通用 JSON 请求体（Record<string, unknown>）传给 request */
+  [key: string]: unknown
+  real_name: string
+  phone: string
+  service_type: string
+  experience: string
+  id_card_no?: string
+  id_card_front_key?: string
+  id_card_back_key?: string
+  health_cert_key?: string
+}
+
+export function submitProviderApplication(data: SubmitApplicationPayload) {
+  return request<{ id: number; status: string; status_label: string }>({
+    url: '/api/v1/provider/application',
+    method: 'POST',
+    data,
+    loading: true,
+  })
+}
+
+/** 上传证件照，返回 object key 供提交申请时回传 */
+export function uploadProviderCert(kind: 'front' | 'back' | 'health', filePath: string) {
+  const token = getToken()
+  const uid = getUserId()
+  const header: Record<string, string> = token
+    ? { Authorization: `Bearer ${token}` }
+    : uid
+      ? { 'X-User-Id': uid }
+      : {}
+  return new Promise<{ key: string }>((resolve, reject) => {
+    uni.uploadFile({
+      url: `${BASE_URL}/api/v1/provider/application/cert`,
+      filePath,
+      name: 'file',
+      formData: { kind },
+      header,
+      success: (res) => {
+        try {
+          const body = JSON.parse(res.data) as { code: number; message: string; data?: { key: string } }
+          if (body.code !== 0 || !body.data) {
+            reject(new ApiError(body.code, body.message || '上传失败'))
+            return
+          }
+          resolve(body.data)
+        } catch {
+          reject(new ApiError(-1, '上传响应解析失败'))
+        }
+      },
+      fail: () => reject(new ApiError(-1, '上传失败，请重试')),
+    })
+  })
 }
 
 /* ---------- 服务方端 ---------- */

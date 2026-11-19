@@ -42,24 +42,14 @@ function goDoc(type: 'terms' | 'privacy' | 'about') {
   uni.navigateTo({ url: `/pages/doc/index?type=${type}` })
 }
 
-/**
- * 开发环境切换演示身份（住户 ↔ 服务方）。
- * 依赖后端 /dev/login，只在 dev 环境注册；线上点会失败并给出提示。
- */
-async function onSwitchRole(role: 'user' | 'provider') {
-  if (user.role === role) {
-    uni.showToast({ title: '已经是该身份', icon: 'none' })
-    return
-  }
-  try {
-    await user.switchRole(role)
-  } catch (e) {
-    uni.showModal({
-      title: '无法切换',
-      content: '演示身份切换仅开发环境可用',
-      showCancel: false,
-    })
-  }
+/** 服务方认证申请/查看状态 */
+function goProviderApply() {
+  uni.navigateTo({ url: '/pages/provider/apply' })
+}
+
+/** 已认证服务方的工作台 */
+function goProviderWork() {
+  uni.reLaunch({ url: '/pages/provider/tasks' })
 }
 </script>
 
@@ -101,6 +91,21 @@ async function onSwitchRole(role: 'user' | 'provider') {
           <text class="chev">›</text>
         </view>
       </view>
+      <!-- 认证通过后身份就是服务方，这里直接进工作台；否则走认证申请 -->
+      <view v-if="user.role === 'provider'" class="menu-item" @tap="goProviderWork">
+        <text>服务方工作台</text>
+        <view class="menu-right">
+          <text class="menu-value">已认证</text>
+          <text class="chev">›</text>
+        </view>
+      </view>
+      <view v-else class="menu-item" @tap="goProviderApply">
+        <text>成为服务方</text>
+        <view class="menu-right">
+          <text class="menu-value">认证后接单</text>
+          <text class="chev">›</text>
+        </view>
+      </view>
     </view>
 
     <!-- 关于与条款 -->
@@ -131,12 +136,7 @@ async function onSwitchRole(role: 'user' | 'provider') {
       </view>
     </view>
 
-    <!-- 演示身份切换：仅开发环境 -->
-    <view class="demo-switch" @tap="onSwitchRole(user.role === 'user' ? 'provider' : 'user')">
-      切换为{{ user.role === 'user' ? '服务方' : '住户' }}（演示）
-    </view>
 
-    <TabBar current="mine" />
   </view>
 </template>
 
@@ -256,15 +256,5 @@ async function onSwitchRole(role: 'user' | 'provider') {
   line-height: 1.7;
 }
 
-.demo-switch {
-  margin: 40rpx 32rpx 0;
-  text-align: center;
-  font-size: 23rpx;
-  color: var(--text-light);
-  padding: 16rpx 0;
-}
 
-.demo-switch:active {
-  opacity: 0.6;
-}
 </style>

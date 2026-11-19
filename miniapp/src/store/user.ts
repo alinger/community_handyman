@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import {
   deleteAddress as apiDeleteAddress,
-  devLogin,
   getMe,
   listAddresses,
   login as apiLogin,
@@ -20,7 +19,6 @@ import {
   clearUserId,
 } from '@/utils/request'
 
-const KEY_OPENID = 'ch_openid'
 const KEY_ROLE = 'ch_role'
 
 /**
@@ -75,22 +73,15 @@ export const useUserStore = defineStore('user', {
     },
 
     /**
-     * 恢复会话：只有本地无 token 时才尝试自动登录。
-     * 自动登录仅限开发环境（H5 ?as= 参数或 dev 后端）；
-     * 生产环境无 token 直接抛错，让页面跳登录页。
+     * 恢复会话：只认本地已有 token，不再有任何自动登录通道。
+     *
+     * 服务方身份只能来自后台审核通过后 role 被置为 provider，
+     * 所以这里不存在「自己切身份」的入口 —— 没有 token 就是未登录，
+     * 由页面守卫跳登录页。
      */
     async restoreSession() {
       if (this.isLoggedIn) return
-      // #ifdef H5
-      {
-        const as = new URLSearchParams(window.location.search).get('as')
-        if (as === 'provider' || as === 'user') {
-          await this.devLoginAs(as === 'provider' ? 'provider' : 'user')
-          return
-        }
-      }
-      // #endif
-      // 有 userId 但没 token：历史联调数据，清掉后按未登录处理
+      // 有 userId 但没 token：历史联调残留，清掉后按未登录处理
       if (this.userId && !this.token) {
         this.userId = ''
         clearUserId()
@@ -123,45 +114,6 @@ export const useUserStore = defineStore('user', {
       const s = await apiRegister({ phone, password, nickname })
       this.applySession(s)
       return s
-    },
-
-    /**
-     * 开发环境联调登录：按固定 openid 造账号，H5 上也用于 ?as= 快速切身份。
-     * 生产环境该接口不存在，调用会失败。
-     */
-    async devLoginAs(role: 'user' | 'provider') {
-      const openid = role === 'provider' ? 'mp_dev_provider' : 'mp_dev_user'
-      uni.setStorageSync(KEY_OPENID, openid)
-      const nickname = role === 'provider' ? '王师傅' : '住户'
-      const res = await devLogin(openid, nickname, role)
-      this.token = res.token
-      this.userId = String(res.user_id)
-      this.nickname = res.nickname || nickname
-      this.role = res.role || role
-      setToken(res.token)
-      setUserId(res.user_id)
-      uni.setStorageSync(KEY_ROLE, this.role)
-      this.ready = true
-    },
-
-    /**
-     * 兼容旧调用：无 token 时尝试 dev 登录，失败则抛错。
-     * 仅供开发期页面（如服务方端）在未接正式登录前使用。
-     */
-    async doLogin() {
-      if (this.isLoggedIn) return
-      const openid = (uni.getStorageSync(KEY_OPENID) as string) || 'mp_dev_user'
-      const isProviderAcct = openid === 'mp_dev_provider'
-      const nickname = isProviderAcct ? '王师傅' : '住户'
-      const res = await devLogin(openid, nickname, isProviderAcct ? 'provider' : 'user')
-      this.token = res.token
-      this.userId = String(res.user_id)
-      this.nickname = res.nickname || nickname
-      this.role = res.role || 'user'
-      setToken(res.token)
-      setUserId(res.user_id)
-      uni.setStorageSync(KEY_ROLE, this.role)
-      this.ready = true
     },
 
     /** 加载地址列表，默认项以后端 is_default 为准（列表已按默认优先排序） */
@@ -200,28 +152,18 @@ export const useUserStore = defineStore('user', {
       return this.addresses
     },
 
-    /**
-     * 切换演示身份（仅开发环境）。
-     * 住户与服务方是两个独立账号，切换后整页刷新。
-     * 生产环境由正式登录决定身份，此方法不会被调用。
-     */
-    async switchRole(role: 'user' | 'provider') {
-      uni.setStorageSync(KEY_ROLE, role)
-      clearToken()
-      clearUserId()
-      this.token = ''
-      this.userId = ''
-      this.addresses = []
-      this.currentAddressId = 0
-      await this.devLoginAs(role)
-      uni.reLaunch({ url: role === 'provider' ? '/pages/provider/tasks' : '/pages/index/index' })
-    },
-
     /** 从后端拉取最新个人资料（设置页进入时刷新昵称与手机号） */
     async loadProfile() {
       const me = await getMe()
       this.nickname = me.nickname || ''
       this.phone = me.phone || ''
+      // role 以后端为准：审核通过后 token 里的角色不会变（签发时就固定了），
+      // 但权限判定用的 users.role 已经更新，这里同步过来，
+      // 用户刷新「我的」页就能看到服务方入口，不必重新登录。
+      if (me.role && me.role !== this.role) {
+        this.role = me.role
+        uni.setStorageSync(KEY_ROLE, me.role)
+      }
       return me
     },
 
@@ -245,7 +187,6 @@ export const useUserStore = defineStore('user', {
       this.role = 'user'
       clearToken()
       clearUserId()
-      uni.removeStorageSync(KEY_OPENID)
       uni.removeStorageSync(KEY_ROLE)
     },
   },

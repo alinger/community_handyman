@@ -21,6 +21,12 @@
       }
     },
     {
+      "path": "pages/provider/apply",
+      "style": {
+        "navigationBarTitleText": "服务方认证"
+      }
+    },
+    {
       "path": "pages/provider/tasks",
       "style": {
         "navigationBarTitleText": "我的任务"

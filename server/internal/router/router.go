@@ -2,6 +2,7 @@
 package router
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -71,6 +72,7 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 	adminRepo := repository.NewAdminUserRepo(db)
 	quoteRepo := repository.NewQuoteRepo(db)
 	redemptionRepo := repository.NewRedemptionRepo(db)
+	providerAppRepo := repository.NewProviderAppRepo(db)
 
 	addrSvc := service.NewAddressService(areaRepo, addrRepo)
 	orderSvc := service.NewOrderService(db, orderRepo, slotRepo, skuRepo, addrRepo, areaRepo, quoteRepo, gw)
@@ -84,6 +86,7 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 	refundSvc := service.NewRefundService(db, orderRepo, slotRepo, payRepo, gw)
 	quoteSvc := service.NewQuoteService(db, orderRepo, quoteRepo, slotRepo)
 	monthlySvc := service.NewMonthlyService(db, orderRepo, slotRepo, redemptionRepo)
+	providerAppSvc := service.NewProviderAppService(providerAppRepo, userRepo, store)
 	deps.Order = orderSvc
 
 	api := handler.New(handler.Deps{
@@ -97,8 +100,9 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 		Admin:    adminSvc,
 		Refund:   refundSvc,
 		Quote:    quoteSvc,
-		Monthly:  monthlySvc,
-		Env:      cfg.App.Env,
+		Monthly:     monthlySvc,
+		ProviderApp: providerAppSvc,
+		Env:         cfg.App.Env,
 		TokenTTL: cfg.Auth.TokenTTL,
 	})
 
@@ -134,6 +138,12 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 			// 时段余量：预约页据此把满员时段置灰
 			authed.GET("/services/slots", api.SlotAvailability)
 
+			// 服务方资质申请：认证通过后 role 才会被置为 provider
+			authed.GET("/provider/application", api.MyProviderApplication)
+			authed.POST("/provider/application", api.SubmitProviderApplication)
+			authed.POST("/provider/application/cert", api.UploadProviderCert)
+			authed.GET("/provider/application/cert/:kind", api.ProviderCertFile)
+
 			authed.POST("/orders/preview", api.PreviewOrder)
 			authed.POST("/orders", api.CreateOrder)
 			authed.GET("/orders", api.ListOrders)
@@ -154,8 +164,18 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 			authed.GET("/orders/:orderNo/records", api.ListRecords)
 			authed.GET("/orders/:orderNo/records/:recordID/file", api.DownloadRecord)
 
-			// 服务方端
-			provider := authed.Group("/provider")
+			// 服务方端：必须已通过资质认证（查 users.role，不信 token 里的旧角色）
+			roleOf := func(ctx context.Context, uid uint64) (string, error) {
+				u, err := userRepo.GetByID(ctx, uid)
+				if err != nil {
+					return "", err
+				}
+				if u == nil {
+					return "", nil
+				}
+				return u.Role, nil
+			}
+			provider := authed.Group("/provider", middleware.RequireProvider(roleOf))
 			{
 				provider.GET("/orders/open", api.OpenOrders)
 				provider.GET("/orders", api.MyOrders)
@@ -206,6 +226,14 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 
 			// 月卡核销与运营配置
 			authedAdmin.GET("/redemptions", api.AdminListRedemptions)
+
+			// 服务方资质审核
+			authedAdmin.GET("/provider-applications", api.AdminListProviderApps)
+			authedAdmin.GET("/provider-applications/stats", api.AdminProviderAppStats)
+			authedAdmin.GET("/provider-applications/:id", api.AdminProviderAppDetail)
+			authedAdmin.GET("/provider-applications/:id/cert/:kind", api.AdminProviderCertFile)
+			authedAdmin.POST("/provider-applications/:id/approve", api.AdminApproveProviderApp)
+			authedAdmin.POST("/provider-applications/:id/reject", api.AdminRejectProviderApp)
 			authedAdmin.PUT("/areas/:id", api.AdminUpdateArea)
 			authedAdmin.POST("/slots/copy", api.AdminCopySlots)
 

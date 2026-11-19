@@ -12,6 +12,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'orders', name: 'orders', component: () => import('@/views/orders/index.vue'), meta: { title: '订单管理' } },
       { path: 'finance', name: 'finance', component: () => import('@/views/finance/index.vue'), meta: { title: '财务管理' } },
       { path: 'users', name: 'users', component: () => import('@/views/users/index.vue'), meta: { title: '用户管理' } },
+      { path: 'provider-apps', name: 'provider-apps', component: () => import('@/views/provider-apps/index.vue'), meta: { title: '服务方审核' } },
       { path: 'redemptions', name: 'redemptions', component: () => import('@/views/redemptions/index.vue'), meta: { title: '月卡核销' } },
       { path: 'areas', name: 'areas', component: () => import('@/views/areas/index.vue'), meta: { title: '服务范围' } },
       { path: 'slots', name: 'slots', component: () => import('@/views/slots/index.vue'), meta: { title: '时段库存' } },

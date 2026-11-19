@@ -75,24 +75,6 @@ function goDoc(type: 'terms' | 'privacy') {
   uni.navigateTo({ url: `/pages/doc/index?type=${type}` })
 }
 
-/** 开发便利：一键进入演示账号，生产环境后端无此路由会失败并给提示 */
-async function devEnter(role: 'user' | 'provider') {
-  if (submitting.value) return
-  submitting.value = true
-  try {
-    await user.devLoginAs(role)
-    uni.showToast({ title: '已进入演示账号', icon: 'success' })
-    goAfterAuth()
-  } catch (e) {
-    uni.showModal({
-      title: '无法进入',
-      content: '演示账号仅开发环境可用，请使用手机号注册或登录',
-      showCancel: false,
-    })
-  } finally {
-    submitting.value = false
-  }
-}
 </script>
 
 <template>
@@ -150,13 +132,6 @@ async function devEnter(role: 'user' | 'provider') {
       <text class="link" @tap="goDoc('privacy')">《隐私政策》</text>
     </view>
 
-    <view class="dev-box">
-      <view class="dev-title">开发调试（仅开发环境可用）</view>
-      <view class="dev-btns">
-        <text class="dev-btn" @tap="devEnter('user')">住户演示账号</text>
-        <text class="dev-btn" @tap="devEnter('provider')">服务方演示账号</text>
-      </view>
-    </view>
   </view>
 </template>
 
@@ -271,32 +246,7 @@ async function devEnter(role: 'user' | 'provider') {
   color: var(--brand-dark);
 }
 
-.dev-box {
-  margin: 60rpx 0 40rpx;
-  padding: 24rpx;
-  border: 1rpx dashed #d8e2e0;
-  border-radius: 16rpx;
-}
 
-.dev-title {
-  font-size: 21rpx;
-  color: var(--text-light);
-  text-align: center;
-  margin-bottom: 16rpx;
-}
 
-.dev-btns {
-  display: flex;
-  gap: 16rpx;
-}
 
-.dev-btn {
-  flex: 1;
-  text-align: center;
-  font-size: 23rpx;
-  color: var(--brand-dark);
-  background: var(--brand-tint);
-  border-radius: 10rpx;
-  padding: 16rpx 0;
-}
 </style>

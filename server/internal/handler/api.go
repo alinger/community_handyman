@@ -27,8 +27,9 @@ type API struct {
 	Provider *service.ProviderService
 	Admin    *service.AdminService
 	Refund   *service.RefundService
-	Quote    *service.QuoteService
-	Monthly  *service.MonthlyService
+	Quote       *service.QuoteService
+	Monthly     *service.MonthlyService
+	ProviderApp *service.ProviderAppService
 
 	Env      string
 	TokenTTL time.Duration
@@ -45,10 +46,11 @@ type Deps struct {
 	Provider *service.ProviderService
 	Admin    *service.AdminService
 	Refund   *service.RefundService
-	Quote    *service.QuoteService
-	Monthly  *service.MonthlyService
-	Env      string
-	TokenTTL time.Duration
+	Quote       *service.QuoteService
+	Monthly     *service.MonthlyService
+	ProviderApp *service.ProviderAppService
+	Env         string
+	TokenTTL    time.Duration
 }
 
 // New 构造 handler 集合。
@@ -56,7 +58,7 @@ func New(d Deps) *API {
 	return &API{
 		Address: d.Address, Order: d.Order, Payment: d.Payment, User: d.User, Auth: d.Auth,
 		Record: d.Record, Provider: d.Provider, Admin: d.Admin, Refund: d.Refund,
-		Quote: d.Quote, Monthly: d.Monthly,
+		Quote: d.Quote, Monthly: d.Monthly, ProviderApp: d.ProviderApp,
 		Env: d.Env, TokenTTL: d.TokenTTL,
 	}
 }

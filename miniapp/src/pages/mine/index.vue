@@ -106,10 +106,18 @@ async function onSwitchRole(role: 'user' | 'provider') {
     uni.showToast({ title: '已经是该身份', icon: 'none' })
     return
   }
-  await user.switchRole(role)
+  try {
+    await user.switchRole(role)
+  } catch (e) {
+    // 切换依赖后端的 /dev/login，该路由只在 dev 注册，
+    // 生产环境点到这里会失败，给一句人话而不是抛异常
+    uni.showModal({
+      title: '无法切换',
+      content: '身份切换仅演示环境可用，正式环境由微信登录决定身份',
+      showCancel: false,
+    })
+  }
 }
-
-const isDev = import.meta.env.DEV
 
 
 function callService() {
@@ -165,7 +173,7 @@ function callService() {
         <text>联系客服</text>
         <text class="chev">›</text>
       </view>
-      <view v-if="isDev" class="menu-item" @tap="onSwitchRole(user.role === 'user' ? 'provider' : 'user')">
+      <view class="menu-item" @tap="onSwitchRole(user.role === 'user' ? 'provider' : 'user')">
         <text>切换为{{ user.role === 'user' ? '服务方' : '住户' }}（演示）</text>
         <text class="chev">›</text>
       </view>

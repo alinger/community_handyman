@@ -8,19 +8,21 @@ import { friendlyDate, price, SERVICE_LABEL, SLOTS } from '@/utils/format'
 
 const user = useUserStore()
 
+// 文案与设计稿一致：全部 / 待服务 / 进行中 / 已完成
 const tabs = [
   { key: '', label: '全部' },
   { key: 'pending', label: '待服务' },
-  { key: 'processing', label: '服务中' },
+  { key: 'processing', label: '进行中' },
   { key: 'completed', label: '已完成' },
 ]
+
+const ICONS: Record<string, string> = { garbage: '🗑', dogwalk: '🐾', accompany: '🏥' }
 
 const activeTab = ref('')
 const orders = ref<Order[]>([])
 const loading = ref(false)
 const finished = ref(false)
 const page = ref(1)
-const total = ref(0)
 
 onShow(() => {
   reload()
@@ -49,10 +51,9 @@ async function fetchPage() {
     await user.ensureLogin()
     const res = await listOrders(activeTab.value, page.value, 10)
     orders.value = page.value === 1 ? res.list : [...orders.value, ...res.list]
-    total.value = res.total
     if (orders.value.length >= res.total) finished.value = true
   } catch (e) {
-    uni.showToast({ title: '加载失败，请下拉重试', icon: 'none' })
+    uni.showToast({ title: '加载失败', icon: 'none' })
   } finally {
     loading.value = false
   }
@@ -72,38 +73,77 @@ function slotLabel(code: string): string {
   return SLOTS.find((s) => s.code === code)?.label || code
 }
 
-/** 列表上的主操作，按状态给不同引导 */
-function primaryAction(o: Order): { text: string; type: string } | null {
-  if (o.status === 'pending_payment') return { text: '去支付', type: 'pay' }
-  if (o.status === 'pending_confirm') return { text: '确认完成', type: 'confirm' }
-  if (o.status === 'completed') return { text: '查看记录', type: 'view' }
-  return null
+/** 卡片副标题：小区 + 单次/包月 */
+function subLine(o: Order): string {
+  const area = o.address ? o.address.community : ''
+  const plan = o.plan === 'monthly' ? '包月服务' : '单次服务'
+  return [area, plan].filter(Boolean).join(' · ')
 }
 
-function onAction(o: Order) {
-  if (o.status === 'pending_payment' || o.status === 'pending_confirm') {
-    goDetail(o.order_no)
-    return
-  }
-  goDetail(o.order_no)
+/** 时间文案：今天/明天优先，其他显示日期 */
+function timeLine(o: Order): string {
+  const d = friendlyDate(o.service_date)
+  return `${d} ${slotLabel(o.slot_code)}`
 }
 
-/** 状态对应的颜色 */
-function statusTone(status: string): string {
+function statusClass(status: string): string {
+  // 待支付与待接单都属于「待服务」，用橙色；履约中才是主色绿
+  if (status === 'pending_payment' || status === 'pending_accept') return 'warn'
   if (status === 'completed') return 'done'
   if (status === 'canceled' || status === 'rejected') return 'closed'
-  if (status === 'pending_payment') return 'warn'
   return 'active'
+}
+
+/** 底部按钮组，按状态给不同引导 */
+function actions(o: Order): { label: string; kind: 'ghost' | 'primary'; key: string }[] {
+  if (o.status === 'pending_payment') {
+    return [
+      { label: '取消订单', kind: 'ghost', key: 'cancel' },
+      { label: '去支付', kind: 'primary', key: 'pay' },
+    ]
+  }
+  if (o.status === 'completed') {
+    return [
+      { label: '查看记录', kind: 'ghost', key: 'records' },
+      { label: '再次预约', kind: 'primary', key: 'again' },
+    ]
+  }
+  if (o.status === 'canceled' || o.status === 'rejected') {
+    return [{ label: '再次预约', kind: 'primary', key: 'again' }]
+  }
+  return [
+    { label: '联系服务方', kind: 'ghost', key: 'contact' },
+    { label: '查看进度', kind: 'primary', key: 'detail' },
+  ]
+}
+
+function onAction(o: Order, key: string) {
+  switch (key) {
+    case 'again':
+      uni.navigateTo({ url: `/pages/order/create?type=${o.service_type}` })
+      break
+    case 'contact':
+      // 服务方联系方式不在订单里，接单后才由平台下发
+      uni.showModal({
+        title: '联系服务方',
+        content: '服务方接单后，平台会通过短信发送联系方式',
+        showCancel: false,
+      })
+      break
+    default:
+      goDetail(o.order_no)
+  }
 }
 </script>
 
 <template>
   <view class="page">
-    <view class="tabs">
+    <!-- 分段控制器：深青绿底，选中项浅色块 -->
+    <view class="seg">
       <view
         v-for="t in tabs"
         :key="t.key"
-        class="tab"
+        class="seg-item"
         :class="{ active: activeTab === t.key }"
         @tap="switchTab(t.key)"
       >
@@ -115,42 +155,38 @@ function statusTone(status: string): string {
       还没有订单，回首页挑一项服务吧
     </view>
 
-    <view
-      v-for="o in orders"
-      :key="o.order_no"
-      class="order-card"
-      @tap="goDetail(o.order_no)"
-    >
-      <view class="card-head">
-        <view class="head-left">
-          <text class="service">{{ SERVICE_LABEL[o.service_type] || o.service_type }}</text>
-          <text v-if="o.plan === 'monthly'" class="badge">包月</text>
+    <view v-for="o in orders" :key="o.order_no" class="order-card">
+      <view class="top">
+        <view class="thumb" :class="o.service_type">{{ ICONS[o.service_type] || '📦' }}</view>
+        <view class="head-main">
+          <view class="title-row">
+            <text class="title">{{ SERVICE_LABEL[o.service_type] }}</text>
+            <text class="status" :class="statusClass(o.status)">{{ o.status_label }}</text>
+          </view>
+          <view class="sub">{{ subLine(o) }}</view>
+          <view class="time">{{ timeLine(o) }}</view>
         </view>
-        <text class="status" :class="statusTone(o.status)">{{ o.status_label }}</text>
       </view>
 
-      <view class="meta">
-        <text class="meta-item">{{ friendlyDate(o.service_date) }}</text>
-        <text class="dot">·</text>
-        <text class="meta-item">{{ slotLabel(o.slot_code) }}</text>
+      <!-- 进度节点：已到达绿色，未到达灰色 -->
+      <view v-if="o.nodes?.length" class="progress">
+        <template v-for="(n, i) in o.nodes" :key="n.node">
+          <view class="node" :class="{ reached: n.reached }">
+            <text class="node-label">{{ n.label }}</text>
+          </view>
+          <view v-if="i < o.nodes.length - 1" class="node-line" :class="{ reached: n.reached }" />
+        </template>
       </view>
 
-      <view v-if="o.address" class="addr">
-        {{ o.address.community }} {{ o.address.lane }} {{ o.address.house_no }}
-      </view>
-
-      <view class="card-foot">
-        <view class="amount">
-          <text class="amount-num">{{ price(o.total_amount) }}</text>
-          <text v-if="o.paid_amount > 0" class="paid">已付</text>
-        </view>
+      <view class="actions">
         <view
-          v-if="primaryAction(o)"
-          class="action"
-          :class="primaryAction(o)!.type"
-          @tap.stop="onAction(o)"
+          v-for="a in actions(o)"
+          :key="a.key"
+          class="act"
+          :class="a.kind"
+          @tap.stop="onAction(o, a.key)"
         >
-          {{ primaryAction(o)!.text }}
+          {{ a.label }}
         </view>
       </view>
     </view>
@@ -164,88 +200,98 @@ function statusTone(status: string): string {
 
 <style scoped>
 .page {
-  padding-top: 24rpx;
+  padding-top: 20rpx;
 }
 
-.tabs {
+/* ---------- 分段控制器 ---------- */
+.seg {
   display: flex;
-  background: #fff;
-  padding: 0 12rpx;
-  margin-bottom: 20rpx;
-  border-radius: 20rpx;
-  margin-left: 24rpx;
-  margin-right: 24rpx;
+  margin: 0 24rpx 20rpx;
+  padding: 8rpx;
+  background: var(--brand);
+  border-radius: 14rpx;
 }
 
-.tab {
+.seg-item {
   flex: 1;
   text-align: center;
-  padding: 24rpx 0;
-  font-size: 27rpx;
-  color: var(--text-sub);
-  position: relative;
+  padding: 18rpx 0;
+  font-size: 26rpx;
+  color: rgba(255, 255, 255, 0.72);
+  border-radius: 10rpx;
 }
 
-.tab.active {
-  color: var(--brand-dark);
+.seg-item.active {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
   font-weight: 600;
 }
 
-.tab.active::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: 8rpx;
-  transform: translateX(-50%);
-  width: 40rpx;
-  height: 6rpx;
-  border-radius: 3rpx;
-  background: var(--brand);
-}
-
+/* ---------- 订单卡 ---------- */
 .order-card {
   background: #fff;
-  border-radius: 24rpx;
-  padding: 28rpx;
+  border-radius: 20rpx;
   margin: 0 24rpx 20rpx;
+  padding: 26rpx 28rpx 22rpx;
 }
 
-.card-head {
+.top {
+  display: flex;
+  gap: 20rpx;
+}
+
+.thumb {
+  width: 104rpx;
+  height: 104rpx;
+  border-radius: 22rpx;
+  font-size: 54rpx;
+  line-height: 104rpx;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.thumb.garbage {
+  background: #e4f3f0;
+}
+
+.thumb.dogwalk {
+  background: #fdf0dd;
+}
+
+.thumb.accompany {
+  background: #e6effa;
+}
+
+.head-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.title-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-.head-left {
-  display: flex;
-  align-items: center;
   gap: 12rpx;
 }
 
-.service {
-  font-size: 30rpx;
-  font-weight: 600;
-}
-
-.badge {
-  font-size: 20rpx;
-  color: #b45309;
-  background: #fef3c7;
-  padding: 4rpx 12rpx;
-  border-radius: 8rpx;
+.title {
+  font-size: 31rpx;
+  font-weight: 700;
+  color: var(--text);
 }
 
 .status {
-  font-size: 25rpx;
-  font-weight: 500;
+  font-size: 24rpx;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
 .status.warn {
-  color: #d97706;
+  color: var(--accent);
 }
 
 .status.active {
-  color: var(--brand-dark);
+  color: var(--brand);
 }
 
 .status.done {
@@ -256,75 +302,82 @@ function statusTone(status: string): string {
   color: var(--text-light);
 }
 
-.meta {
-  margin-top: 16rpx;
-  font-size: 25rpx;
+.sub {
+  margin-top: 10rpx;
+  font-size: 23rpx;
   color: var(--text-sub);
+}
+
+.time {
+  margin-top: 6rpx;
+  font-size: 23rpx;
+  color: var(--text-sub);
+}
+
+/* ---------- 进度 ---------- */
+.progress {
   display: flex;
   align-items: center;
-  gap: 8rpx;
+  margin-top: 22rpx;
+  padding: 0 4rpx;
 }
 
-.dot {
-  color: var(--text-light);
+.node {
+  flex-shrink: 0;
 }
 
-.addr {
-  margin-top: 8rpx;
-  font-size: 24rpx;
-  color: var(--text-light);
+.node-label {
+  font-size: 23rpx;
+  color: #b6bec6;
 }
 
-.card-foot {
-  margin-top: 20rpx;
-  padding-top: 20rpx;
-  border-top: 1rpx solid #f3f4f6;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.amount {
-  display: flex;
-  align-items: baseline;
-  gap: 10rpx;
-}
-
-.amount-num {
-  font-size: 32rpx;
+.node.reached .node-label {
+  color: var(--brand);
   font-weight: 700;
 }
 
-.paid {
-  font-size: 22rpx;
-  color: var(--text-light);
+.node-line {
+  flex: 1;
+  height: 2rpx;
+  background: #e6eae8;
+  margin: 0 14rpx;
 }
 
-.action {
-  padding: 12rpx 32rpx;
-  border-radius: 30rpx;
+.node-line.reached {
+  background: #a8d8d2;
+}
+
+/* ---------- 操作 ---------- */
+.actions {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 22rpx;
+}
+
+.act {
+  flex: 1;
+  text-align: center;
+  padding: 18rpx 0;
+  border-radius: 12rpx;
   font-size: 25rpx;
 }
 
-.action.pay {
-  background: var(--brand);
-  color: #fff;
+.act.ghost {
+  border: 1rpx solid #e6eae8;
+  color: var(--text);
+  background: #fff;
 }
 
-.action.confirm {
-  background: #fef3c7;
-  color: #b45309;
-}
-
-.action.view {
-  border: 1rpx solid var(--border);
-  color: var(--text-sub);
+.act.primary {
+  background: var(--brand-light);
+  color: var(--brand-dark);
+  font-weight: 600;
 }
 
 .loading {
   text-align: center;
   color: var(--text-light);
-  font-size: 24rpx;
-  padding: 30rpx 0;
+  font-size: 23rpx;
+  padding: 28rpx 0;
 }
 </style>

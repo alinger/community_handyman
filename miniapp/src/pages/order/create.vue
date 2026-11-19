@@ -3,30 +3,30 @@ import { computed, reactive, ref, watch } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { createOrder, previewOrder, type CreateOrderPayload, type PreviewResp } from '@/api'
 import { useUserStore } from '@/store/user'
-import { availableSlots, nextDays, price, SERVICE_LABEL, SLOTS } from '@/utils/format'
+import { availableSlots, nextDays, price, SLOTS } from '@/utils/format'
 import { ApiError } from '@/utils/request'
 
 const user = useUserStore()
 
-const serviceTypes = [
-  { type: 'garbage', name: '代倒垃圾' },
-  { type: 'dogwalk', name: '遛宠' },
-  { type: 'accompany', name: '陪诊' },
-]
-
 const dates = nextDays(7)
+const durations = [20, 30, 40, 60]
+const garbageTypes = [
+  { value: 'kitchen', label: '厨余垃圾' },
+  { value: 'other', label: '其他垃圾' },
+  { value: 'recyclable', label: '可回收物' },
+]
 
 const form = reactive({
   serviceType: 'garbage',
   serviceDate: dates[0].value,
   slotCode: '',
+  plan: 'single',
   quantity: 1,
   garbageType: 'kitchen',
   petCount: 1,
   durationMin: 20,
   feedOnly: false,
   needFamiliar: false,
-  // 陪诊无结构化字段，先收在这三个输入里，提交时拼进 remark
   patientName: '',
   hospital: '',
   department: '',
@@ -36,25 +36,37 @@ const form = reactive({
 const preview = ref<PreviewResp | null>(null)
 const previewError = ref('')
 const submitting = ref(false)
+const showTimePicker = ref(false)
 
-const slots = computed(() => {
-  if (form.serviceType === 'dogwalk') return availableSlots(form.serviceDate)
-  return SLOTS
+/** 顶部 banner 按服务类型切换文案 */
+const banner = computed(() => {
+  const map: Record<string, { title: string; sub: string; art: string }> = {
+    garbage: { title: '上门代倒垃圾', sub: '规范分类，按时上门', art: '🗑' },
+    dogwalk: { title: '上门遛宠', sub: '20 分钟起，可加时长', art: '🐾' },
+    accompany: { title: '医院陪诊', sub: '按小时计费，人工报价', art: '🏥' },
+  }
+  return map[form.serviceType] || map.garbage
 })
+
+const slots = computed(() =>
+  form.serviceType === 'dogwalk' ? availableSlots(form.serviceDate) : SLOTS,
+)
 
 const addressText = computed(() => {
   const a = user.currentAddress
-  if (!a) return '请添加地址'
+  if (!a) return ''
   return `${a.community} ${a.lane} ${a.house_no}`
 })
 
-const garbageTypes = [
-  { value: 'kitchen', label: '厨余垃圾' },
-  { value: 'other', label: '其他垃圾' },
-  { value: 'recyclable', label: '可回收物' },
-]
+const timeText = computed(() => {
+  if (!form.slotCode) return ''
+  const d = dates.find((x) => x.value === form.serviceDate)
+  const s = slots.value.find((x) => x.code === form.slotCode)
+  return [d?.label, s?.label].filter(Boolean).join(' ')
+})
 
-const durations = [20, 30, 40, 60]
+/** 数量单位随服务类型变化，设计稿里是「1 袋」 */
+const unitText = computed(() => (form.serviceType === 'garbage' ? '袋' : '只'))
 
 onLoad(async (query) => {
   if (query?.type && ['garbage', 'dogwalk', 'accompany'].includes(query.type)) {
@@ -70,7 +82,6 @@ onLoad(async (query) => {
   refreshPreview()
 })
 
-/** 切换服务后时段可能变化，需要纠正当前选择 */
 function syncSlot() {
   const list = slots.value
   if (!list.some((s) => s.code === form.slotCode)) {
@@ -80,28 +91,16 @@ function syncSlot() {
 
 watch(
   () => form.serviceDate,
-  () => {
-    syncSlot()
-  },
+  () => syncSlot(),
 )
 
-function switchService(type: string) {
-  form.serviceType = type
-  syncSlot()
-  refreshPreview()
-}
-
-function pickDate(v: string) {
-  form.serviceDate = v
-}
-
-// 任一影响价格的字段变化都重新试算，节流 300ms 避免连续点击打爆接口
 let timer: ReturnType<typeof setTimeout> | null = null
 watch(
   () => [
     form.serviceType,
     form.serviceDate,
     form.slotCode,
+    form.plan,
     form.quantity,
     form.petCount,
     form.durationMin,
@@ -127,6 +126,7 @@ function buildPayload(): CreateOrderPayload | null {
   }
 
   if (form.serviceType === 'garbage') {
+    payload.plan = form.plan
     payload.quantity = form.quantity
     payload.garbage_type = form.garbageType
   } else if (form.serviceType === 'dogwalk') {
@@ -135,7 +135,7 @@ function buildPayload(): CreateOrderPayload | null {
     payload.feed_only = form.feedOnly
     payload.need_familiar = form.needFamiliar
   } else {
-    // 陪诊信息后端暂无结构化字段，拼进备注，由运营报价时读取
+    // 陪诊信息后端暂无结构化字段，拼进备注由运营报价时读取
     const parts = [
       form.patientName && `就诊人：${form.patientName}`,
       form.hospital && `医院：${form.hospital}`,
@@ -187,6 +187,15 @@ function chooseAddress() {
   })
 }
 
+function pickDate(v: string) {
+  form.serviceDate = v
+}
+
+function pickSlot(code: string) {
+  form.slotCode = code
+  showTimePicker.value = false
+}
+
 async function submit() {
   if (submitting.value) return
   if (!user.currentAddress) {
@@ -195,6 +204,7 @@ async function submit() {
   }
   if (!form.slotCode) {
     uni.showToast({ title: '请选择时段', icon: 'none' })
+    showTimePicker.value = true
     return
   }
   if (form.serviceType === 'accompany' && !form.hospital) {
@@ -224,23 +234,25 @@ async function submit() {
     await startPay(res.order.order_no)
     uni.redirectTo({ url: `/pages/order/detail?orderNo=${res.order.order_no}` })
   } catch (e) {
-    const msg = e instanceof ApiError ? e.message : '提交失败，请重试'
-    uni.showModal({ title: '提交失败', content: msg, showCancel: false })
+    uni.showModal({
+      title: '提交失败',
+      content: e instanceof ApiError ? e.message : '请重试',
+      showCancel: false,
+    })
   } finally {
     submitting.value = false
   }
 }
 
 /**
- * 发起支付。
- * 沙箱渠道无法调起真实微信支付，开发环境用后端 mock-pay 接口走完回调链路；
- * 接入真实商户号后换成 uni.requestPayment(params)。
+ * 发起支付。沙箱渠道无法调起真实微信支付，
+ * 开发环境用后端 mock-pay 走完回调；接商户号后换成 uni.requestPayment。
  */
 async function startPay(orderNo: string) {
   // #ifdef MP-WEIXIN
   uni.showModal({
     title: '待支付',
-    content: '开发环境使用沙箱支付，订单详情页可模拟支付成功',
+    content: '开发环境使用沙箱支付，可在订单详情页完成支付',
     showCancel: false,
   })
   return
@@ -262,268 +274,368 @@ async function startPay(orderNo: string) {
 
 <template>
   <view class="page">
-    <!-- 服务类型 -->
-    <view class="service-tabs">
-      <view
-        v-for="s in serviceTypes"
-        :key="s.type"
-        class="tab"
-        :class="{ active: form.serviceType === s.type }"
-        @tap="switchService(s.type)"
-      >
-        {{ s.name }}
-      </view>
-    </view>
-
-    <!-- 地址 -->
-    <view class="card">
-      <view class="field" @tap="chooseAddress">
-        <text class="label">服务地址</text>
-        <view class="value-wrap">
-          <text class="value">{{ addressText }}</text>
-          <text class="chev">›</text>
+    <!-- 服务 banner -->
+    <view class="banner">
+      <view class="banner-copy">
+        <view class="banner-title">{{ banner.title }}</view>
+        <view class="banner-sub">
+          {{ user.currentAddress?.community || '示例小区' }} · 单次服务
         </view>
       </view>
-      <view v-if="!user.hasAddress" class="hint">请先在「我的」页面添加常用地址</view>
+      <view class="banner-art">{{ banner.art }}</view>
     </view>
 
-    <!-- 时间 -->
+    <!-- 服务地址 -->
+    <view class="card" @tap="chooseAddress">
+      <view class="f-label">服务地址</view>
+      <view class="f-value" :class="{ placeholder: !addressText }">
+        <view class="pin" />
+        <text class="f-text">{{ addressText || '请选择服务地址' }}</text>
+        <text class="chev">›</text>
+      </view>
+    </view>
+
+    <!-- 服务时间 -->
     <view class="card">
-      <view class="section-title">预约时间</view>
-      <scroll-view scroll-x class="dates" :show-scrollbar="false">
+      <view class="f-label">服务时间</view>
+      <view class="f-value" :class="{ placeholder: !timeText }" @tap="showTimePicker = !showTimePicker">
+        <text class="f-text">{{ timeText || '请选择日期与时段' }}</text>
+        <text class="chev">{{ showTimePicker ? '⌃' : '›' }}</text>
+      </view>
+
+      <view v-if="showTimePicker" class="picker">
+        <scroll-view scroll-x class="dates" :show-scrollbar="false">
+          <view
+            v-for="d in dates"
+            :key="d.value"
+            class="date-chip"
+            :class="{ active: form.serviceDate === d.value }"
+            @tap.stop="pickDate(d.value)"
+          >
+            {{ d.label }}
+          </view>
+        </scroll-view>
+        <view class="slot-grid">
+          <view
+            v-for="s in slots"
+            :key="s.code"
+            class="slot-chip"
+            :class="{ active: form.slotCode === s.code }"
+            @tap.stop="pickSlot(s.code)"
+          >
+            {{ s.label }}
+          </view>
+        </view>
+        <view v-if="form.serviceType === 'dogwalk'" class="f-hint">
+          遛宠工作日仅开放晚间时段，周末全天可约
+        </view>
+      </view>
+    </view>
+
+    <!-- 服务方案（仅垃圾） -->
+    <view v-if="form.serviceType === 'garbage'" class="card">
+      <view class="f-label">服务方案</view>
+      <view class="pills">
+        <view class="pill" :class="{ active: form.plan === 'single' }" @tap="form.plan = 'single'">
+          单次
+        </view>
+        <view class="pill" :class="{ active: form.plan === 'monthly' }" @tap="form.plan = 'monthly'">
+          包月
+        </view>
+      </view>
+    </view>
+
+    <!-- 垃圾类型 -->
+    <view v-if="form.serviceType === 'garbage'" class="card">
+      <view class="f-label">垃圾类型</view>
+      <view class="pills">
         <view
-          v-for="d in dates"
-          :key="d.value"
-          class="date-chip"
-          :class="{ active: form.serviceDate === d.value }"
-          @tap="pickDate(d.value)"
+          v-for="t in garbageTypes"
+          :key="t.value"
+          class="pill soft"
+          :class="{ active: form.garbageType === t.value }"
+          @tap="form.garbageType = t.value"
         >
-          {{ d.label }}
-        </view>
-      </scroll-view>
-      <view class="slots">
-        <view
-          v-for="s in slots"
-          :key="s.code"
-          class="slot"
-          :class="{ active: form.slotCode === s.code }"
-          @tap="form.slotCode = s.code"
-        >
-          {{ s.label }}
+          {{ t.label }}
         </view>
       </view>
-      <view v-if="form.serviceType === 'dogwalk'" class="hint">
-        遛宠工作日仅开放晚间时段，周末全天可约
+      <view class="f-hint">有害垃圾请按社区要求处理</view>
+    </view>
+
+    <!-- 数量（仅垃圾） -->
+    <view v-if="form.serviceType === 'garbage'" class="card">
+      <view class="f-row">
+        <view class="f-label">数量</view>
+        <view class="stepper">
+          <view class="step-btn" @tap="form.quantity = Math.max(1, form.quantity - 1)">−</view>
+          <text class="step-val">{{ form.quantity }} {{ unitText }}</text>
+          <view class="step-btn" @tap="form.quantity = Math.min(20, form.quantity + 1)">＋</view>
+        </view>
       </view>
     </view>
 
-    <!-- 服务明细 -->
-    <view class="card">
-      <view class="section-title">{{ SERVICE_LABEL[form.serviceType] }}信息</view>
+    <!-- 遛宠参数 -->
+    <view v-if="form.serviceType === 'dogwalk'" class="card">
+      <view class="f-row">
+        <view class="f-label">宠物只数</view>
+        <view class="stepper">
+          <view class="step-btn" @tap="form.petCount = Math.max(1, form.petCount - 1)">−</view>
+          <text class="step-val">{{ form.petCount }} 只</text>
+          <view class="step-btn" @tap="form.petCount = Math.min(5, form.petCount + 1)">＋</view>
+        </view>
+      </view>
+      <view class="divider" />
+      <view class="f-label">服务时长</view>
+      <view class="pills">
+        <view
+          v-for="d in durations"
+          :key="d"
+          class="pill soft"
+          :class="{ active: form.durationMin === d }"
+          @tap="form.durationMin = d"
+        >
+          {{ d }} 分钟
+        </view>
+      </view>
+      <view class="divider" />
+      <view class="f-row">
+        <view class="f-label">仅喂食清洁（不遛）</view>
+        <switch class="sw" :checked="form.feedOnly" color="#0f7f78" @change="form.feedOnly = !form.feedOnly" />
+      </view>
+      <view class="f-row">
+        <view class="f-label">需要提前上门熟悉</view>
+        <switch
+          class="sw"
+          :checked="form.needFamiliar"
+          color="#0f7f78"
+          @change="form.needFamiliar = !form.needFamiliar"
+        />
+      </view>
+      <view class="f-hint">累计完成 5 单后免熟悉费</view>
+    </view>
 
-      <template v-if="form.serviceType === 'garbage'">
-        <view class="field">
-          <text class="label">垃圾袋数</text>
-          <view class="stepper">
-            <view class="step-btn" @tap="form.quantity = Math.max(1, form.quantity - 1)">−</view>
-            <text class="step-val">{{ form.quantity }}</text>
-            <view class="step-btn" @tap="form.quantity = Math.min(20, form.quantity + 1)">＋</view>
-          </view>
-        </view>
-        <view class="field">
-          <text class="label">垃圾类型</text>
-          <view class="chips">
-            <view
-              v-for="t in garbageTypes"
-              :key="t.value"
-              class="chip"
-              :class="{ active: form.garbageType === t.value }"
-              @tap="form.garbageType = t.value"
-            >
-              {{ t.label }}
-            </view>
-          </view>
-        </view>
-      </template>
-
-      <template v-else-if="form.serviceType === 'dogwalk'">
-        <view class="field">
-          <text class="label">宠物只数</text>
-          <view class="stepper">
-            <view class="step-btn" @tap="form.petCount = Math.max(1, form.petCount - 1)">−</view>
-            <text class="step-val">{{ form.petCount }}</text>
-            <view class="step-btn" @tap="form.petCount = Math.min(5, form.petCount + 1)">＋</view>
-          </view>
-        </view>
-        <view class="field">
-          <text class="label">服务时长</text>
-          <view class="chips">
-            <view
-              v-for="d in durations"
-              :key="d"
-              class="chip"
-              :class="{ active: form.durationMin === d }"
-              @tap="form.durationMin = d"
-            >
-              {{ d }} 分钟
-            </view>
-          </view>
-        </view>
-        <view class="field">
-          <text class="label">仅喂食清洁（不遛）</text>
-          <switch :checked="form.feedOnly" color="#16a34a" @change="form.feedOnly = !form.feedOnly" />
-        </view>
-        <view class="field">
-          <text class="label">需要提前上门熟悉</text>
-          <switch :checked="form.needFamiliar" color="#16a34a" @change="form.needFamiliar = !form.needFamiliar" />
-        </view>
-        <view class="hint">累计完成 5 单后免熟悉费</view>
-      </template>
-
-      <template v-else>
-        <view class="field">
-          <text class="label">就诊人</text>
-          <input v-model="form.patientName" class="input" placeholder="如：张阿姨" />
-        </view>
-        <view class="field">
-          <text class="label">就诊医院</text>
-          <input v-model="form.hospital" class="input" placeholder="如：仁济医院东院" />
-        </view>
-        <view class="field">
-          <text class="label">科室</text>
-          <input v-model="form.department" class="input" placeholder="如：心内科" />
-        </view>
-        <view class="hint">陪诊按小时人工报价，提交后运营会联系确认</view>
-      </template>
+    <!-- 陪诊信息 -->
+    <view v-if="form.serviceType === 'accompany'" class="card">
+      <view class="f-row">
+        <view class="f-label">就诊人</view>
+        <input v-model="form.patientName" class="f-input" placeholder="如：张阿姨" />
+      </view>
+      <view class="divider" />
+      <view class="f-row">
+        <view class="f-label">就诊医院</view>
+        <input v-model="form.hospital" class="f-input" placeholder="如：仁济医院东院" />
+      </view>
+      <view class="divider" />
+      <view class="f-row">
+        <view class="f-label">科室</view>
+        <input v-model="form.department" class="f-input" placeholder="如：心内科" />
+      </view>
+      <view class="f-hint">陪诊按小时人工报价，提交后运营会联系确认</view>
     </view>
 
     <!-- 备注 -->
     <view class="card">
-      <view class="section-title">补充说明</view>
-      <textarea
+      <view class="f-label">备注</view>
+      <input
         v-model="form.remark"
-        class="textarea"
+        class="remark-input"
         maxlength="200"
-        placeholder="如门禁密码、宠物习性、特殊要求（选填）"
+        placeholder="例如：请提前联系 / 门禁密码"
       />
     </view>
 
-    <!-- 费用明细 -->
-    <view v-if="preview" class="card">
-      <view class="section-title">费用明细</view>
-      <view v-for="(item, i) in preview.items" :key="i" class="price-row">
-        <view class="price-name">
-          {{ item.name }}
-          <text v-if="item.note" class="price-note">{{ item.note }}</text>
+    <!-- 费用估算 -->
+    <view class="fee-card">
+      <view class="fee-row">
+        <text class="fee-label">费用估算</text>
+        <text class="fee-amount">
+          {{ preview ? (preview.manual_quote ? '待报价' : price(preview.total)) : '--' }}
+        </text>
+      </view>
+      <view class="fee-note">
+        {{ preview?.manual_quote ? '陪诊按小时人工报价' : '按当前价格计算，最终以订单为准' }}
+      </view>
+      <view v-if="preview?.items?.length" class="fee-items">
+        <view v-for="(it, i) in preview.items" :key="i" class="fee-item">
+          <text>{{ it.name }}<text v-if="it.note" class="fee-item-note">（{{ it.note }}）</text></text>
+          <text>{{ it.amount === 0 ? '免费' : price(it.amount) }}</text>
         </view>
-        <text class="price-amount">{{ item.amount === 0 ? '免费' : price(item.amount) }}</text>
       </view>
-      <view class="divider" />
-      <view class="price-row total">
-        <text>合计</text>
-        <text class="total-amount">{{ preview.manual_quote ? '待报价' : price(preview.total) }}</text>
-      </view>
+      <view v-if="previewError" class="fee-error">{{ previewError }}</view>
     </view>
 
-    <view v-else-if="previewError" class="card error-tip">{{ previewError }}</view>
-
-    <!-- 底部提交 -->
-    <view class="bottom-bar">
-      <view class="sum">
-        <text class="sum-label">合计</text>
-        <text class="sum-amount">{{ preview ? (preview.manual_quote ? '待报价' : price(preview.total)) : '--' }}</text>
+    <!-- 提交 -->
+    <view class="submit-wrap">
+      <view class="btn-primary" :class="{ 'is-disabled': submitting }" @tap="submit">
+        {{ submitting ? '提交中…' : '预约服务' }}
       </view>
-      <view class="submit" :class="{ disabled: submitting }" @tap="submit">
-        {{ submitting ? '提交中…' : '提交预约' }}
-      </view>
+      <view class="foot-note">提交后可在「订单」中查看服务进度</view>
     </view>
   </view>
 </template>
 
 <style scoped>
 .page {
-  padding: 24rpx 0 200rpx;
+  padding-bottom: 60rpx;
 }
 
-.service-tabs {
+/* ---------- banner ---------- */
+.banner {
+  position: relative;
+  margin: 20rpx 24rpx;
+  height: 196rpx;
+  border-radius: 22rpx;
+  background: linear-gradient(135deg, #e9f5f3 0%, #e4f3f0 100%);
+  overflow: hidden;
   display: flex;
-  gap: 16rpx;
-  padding: 0 24rpx 24rpx;
+  align-items: center;
+  padding: 0 34rpx;
 }
 
-.tab {
-  flex: 1;
-  text-align: center;
-  padding: 20rpx 0;
+.banner-copy {
+  position: relative;
+  z-index: 2;
+}
+
+.banner-title {
+  font-size: 40rpx;
+  font-weight: 800;
+  color: #14413c;
+  letter-spacing: 0.5rpx;
+}
+
+.banner-sub {
+  margin-top: 10rpx;
+  font-size: 23rpx;
+  color: #5c7b76;
+}
+
+.banner-art {
+  position: absolute;
+  right: 24rpx;
+  bottom: -10rpx;
+  font-size: 132rpx;
+  line-height: 1;
+  opacity: 0.9;
+}
+
+/* ---------- 卡片 ---------- */
+.card {
   background: #fff;
-  border-radius: 16rpx;
-  font-size: 27rpx;
-  color: var(--text-sub);
-  border: 1rpx solid transparent;
+  border-radius: 18rpx;
+  margin: 0 24rpx 18rpx;
+  padding: 26rpx 30rpx;
 }
 
-.tab.active {
-  color: var(--brand-dark);
-  background: var(--brand-light);
-  border-color: var(--brand);
+.f-label {
+  font-size: 28rpx;
   font-weight: 600;
-}
-
-.field {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20rpx 0;
-  border-bottom: 1rpx solid #f3f4f6;
-  gap: 20rpx;
-}
-
-.field:last-child {
-  border-bottom: none;
-}
-
-.label {
-  font-size: 27rpx;
   color: var(--text);
-  flex-shrink: 0;
 }
 
-.value-wrap {
+.f-value {
+  margin-top: 16rpx;
   display: flex;
   align-items: center;
-  gap: 8rpx;
-  max-width: 70%;
+  gap: 10rpx;
 }
 
-.value {
-  font-size: 27rpx;
-  color: var(--text-sub);
-  text-align: right;
+.f-value.placeholder .f-text {
+  color: var(--text-light);
+}
+
+.f-text {
+  flex: 1;
+  font-size: 26rpx;
+  color: var(--text);
 }
 
 .chev {
   color: var(--text-light);
+  font-size: 26rpx;
 }
 
-.hint {
-  font-size: 23rpx;
+.pin {
+  width: 14rpx;
+  height: 14rpx;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: var(--brand);
+  flex-shrink: 0;
+}
+
+.f-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  /* 一个卡片里放多个字段时，没有上下留白会挤成一片 */
+  padding: 12rpx 0;
+}
+
+.f-hint {
+  margin-top: 14rpx;
+  font-size: 22rpx;
   color: var(--text-light);
-  margin-top: 12rpx;
   line-height: 1.6;
+}
+
+.divider {
+  height: 1rpx;
+  background: #f2f4f3;
+  margin: 22rpx 0;
+}
+
+.f-input {
+  flex: 1;
+  text-align: right;
+  font-size: 26rpx;
+}
+
+/* 不设 flex-shrink:0 时，switch 在 flex 容器里会被压扁 */
+.sw {
+  flex-shrink: 0;
+  /* uni-app 的 switch 默认比其他控件小一圈，放大到与标签视觉等重 */
+  transform: scale(1.15);
+  transform-origin: right center;
+}
+
+/* 不设 flex-shrink:0 时，switch 在 flex 容器里会被压扁 */
+.sw {
+  flex-shrink: 0;
+  /* uni-app 的 switch 默认比其他控件小一圈，放大到与标签视觉等重 */
+  transform: scale(1.15);
+  transform-origin: right center;
+}
+
+.remark-input {
+  margin-top: 16rpx;
+  height: 76rpx;
+  border: 1rpx solid #e8ecea;
+  border-radius: 12rpx;
+  padding: 0 22rpx;
+  font-size: 25rpx;
+}
+
+/* ---------- 选择器 ---------- */
+.picker {
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid #f2f4f3;
 }
 
 .dates {
   white-space: nowrap;
-  margin-bottom: 20rpx;
+  margin-bottom: 18rpx;
 }
 
 .date-chip {
   display: inline-block;
-  padding: 14rpx 28rpx;
-  margin-right: 16rpx;
-  background: #f3f4f6;
-  border-radius: 32rpx;
-  font-size: 26rpx;
+  padding: 12rpx 26rpx;
+  margin-right: 14rpx;
+  background: #f4f6f5;
+  border-radius: 30rpx;
+  font-size: 24rpx;
   color: var(--text-sub);
 }
 
@@ -533,178 +645,157 @@ async function startPay(orderNo: string) {
   font-weight: 500;
 }
 
-.slots {
-  display: flex;
-  gap: 16rpx;
+.slot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14rpx;
 }
 
-.slot {
-  flex: 1;
+.slot-chip {
   text-align: center;
-  padding: 18rpx 0;
-  border: 1rpx solid var(--border);
-  border-radius: 16rpx;
-  font-size: 25rpx;
+  padding: 16rpx 0;
+  border: 1rpx solid #e3e8e6;
+  border-radius: 12rpx;
+  font-size: 23rpx;
   color: var(--text-sub);
 }
 
-.slot.active {
+.slot-chip.active {
   border-color: var(--brand);
-  color: var(--brand-dark);
   background: var(--brand-light);
+  color: var(--brand-dark);
   font-weight: 500;
 }
 
+/* ---------- 胶囊 ---------- */
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14rpx;
+  margin: 16rpx 0 4rpx;
+}
+
+.pill {
+  padding: 14rpx 40rpx;
+  border-radius: 34rpx;
+  border: 1rpx solid #e3e8e6;
+  background: #fff;
+  font-size: 26rpx;
+  color: var(--text-sub);
+}
+
+.pill.active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+  font-weight: 500;
+}
+
+/* 垃圾类型用浅底选中，与设计稿一致 */
+.pill.soft {
+  padding: 12rpx 28rpx;
+  border-radius: 30rpx;
+  font-size: 24rpx;
+}
+
+.pill.soft.active {
+  background: #e4f3f0;
+  border-color: #e4f3f0;
+  color: var(--brand-dark);
+}
+
+/* ---------- 步进器 ---------- */
 .stepper {
   display: flex;
   align-items: center;
-  gap: 24rpx;
+  gap: 26rpx;
 }
 
 .step-btn {
-  width: 56rpx;
-  height: 56rpx;
+  width: 52rpx;
+  height: 52rpx;
   border-radius: 50%;
-  background: #f3f4f6;
+  border: 1rpx solid #e3e8e6;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 32rpx;
+  font-size: 30rpx;
   color: var(--text);
+  background: #fff;
 }
 
 .step-val {
-  font-size: 30rpx;
-  font-weight: 600;
-  min-width: 48rpx;
+  font-size: 27rpx;
+  color: var(--text);
+  min-width: 90rpx;
   text-align: center;
 }
 
-.chips {
-  display: flex;
-  gap: 12rpx;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+/* ---------- 费用估算 ---------- */
+.fee-card {
+  margin: 22rpx 24rpx 0;
+  padding: 26rpx 30rpx;
+  background: var(--accent-soft);
+  border-radius: 18rpx;
 }
 
-.chip {
-  padding: 10rpx 16rpx;
-  border-radius: 24rpx;
-  background: #f3f4f6;
-  font-size: 22rpx;
-  color: var(--text-sub);
-  white-space: nowrap;
-}
-
-.chip.active {
-  background: var(--brand-light);
-  color: var(--brand-dark);
-  font-weight: 500;
-}
-
-.input {
-  flex: 1;
-  text-align: right;
-  font-size: 27rpx;
-}
-
-.textarea {
-  width: 100%;
-  height: 140rpx;
-  font-size: 27rpx;
-  line-height: 1.6;
-}
-
-.price-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 12rpx 0;
-  font-size: 27rpx;
-  color: var(--text-sub);
-}
-
-.price-name {
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-}
-
-.price-note {
-  font-size: 22rpx;
-  color: var(--text-light);
-}
-
-.price-amount {
-  color: var(--text);
-}
-
-.divider {
-  height: 1rpx;
-  background: #f3f4f6;
-  margin: 12rpx 0;
-}
-
-.total {
-  align-items: center;
-  font-size: 28rpx;
-  color: var(--text);
-}
-
-.total-amount {
-  font-size: 34rpx;
-  font-weight: 700;
-  color: #ef4444;
-}
-
-.error-tip {
-  color: var(--danger);
-  font-size: 26rpx;
-}
-
-.bottom-bar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20rpx 24rpx;
-  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
-  background: #fff;
-  border-top: 1rpx solid var(--border);
-}
-
-.sum {
+.fee-row {
   display: flex;
   align-items: baseline;
-  gap: 10rpx;
+  justify-content: space-between;
 }
 
-.sum-label {
-  font-size: 24rpx;
-  color: var(--text-sub);
+.fee-label {
+  font-size: 27rpx;
+  font-weight: 600;
+  color: #8a5a12;
 }
 
-.sum-amount {
-  font-size: 38rpx;
+.fee-amount {
+  font-size: 40rpx;
   font-weight: 700;
-  color: #ef4444;
+  color: var(--accent);
 }
 
-.submit {
-  background: var(--brand);
-  color: #fff;
-  padding: 0 64rpx;
-  height: 84rpx;
-  line-height: 84rpx;
-  border-radius: 42rpx;
-  font-size: 30rpx;
-  font-weight: 500;
+.fee-note {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  color: #b08a52;
 }
 
-.submit.disabled {
-  background: #d1d5db;
+.fee-items {
+  margin-top: 16rpx;
+  padding-top: 14rpx;
+  border-top: 1rpx dashed #ecd9b8;
+}
+
+.fee-item {
+  display: flex;
+  justify-content: space-between;
+  font-size: 22rpx;
+  color: #9a7742;
+  padding: 6rpx 0;
+}
+
+.fee-item-note {
+  color: #b9a184;
+}
+
+.fee-error {
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: var(--danger);
+}
+
+/* ---------- 提交 ---------- */
+.submit-wrap {
+  padding: 30rpx 24rpx 0;
+}
+
+.foot-note {
+  margin-top: 18rpx;
+  text-align: center;
+  font-size: 21rpx;
+  color: var(--text-light);
 }
 </style>

@@ -17,9 +17,9 @@ export function price(fen: number): string {
 
 /** 服务类型文案 */
 export const SERVICE_LABEL: Record<string, string> = {
-  garbage: '代倒垃圾',
-  dogwalk: '遛宠',
-  accompany: '陪诊',
+  garbage: '上门代倒垃圾',
+  dogwalk: '遛宠服务',
+  accompany: '陪诊服务',
 }
 
 /** 服务类型简短说明 */

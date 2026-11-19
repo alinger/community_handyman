@@ -1,10 +1,11 @@
 <script setup lang="ts">
 /**
  * 自定义底部导航，按角色分流：
- * 住户：首页 / 订单 / 我的
- * 服务方：任务 / 接单池 / 我的
- * 不用原生 tabBar：一是要配图片图标（暂无设计资源），
- * 二是同一工程要承载两种角色，原生 tab 配置是全局唯一的。
+ * 住户：首页 / 订单 / 我的；服务方：任务 / 接单池 / 我的。
+ *
+ * 图标用 CSS 画（房子、清单、人像），不引入图片资源：
+ * 小程序不支持 <svg> 标签，图标字体又要多带字体文件，
+ * 三个线性图标用 CSS 拼最划算，且能随选中态在「线框 / 实心」间切换。
  */
 import { computed } from 'vue'
 import { useUserStore } from '@/store/user'
@@ -15,19 +16,19 @@ const user = useUserStore()
 const items = computed(() => {
   if (user.role === 'provider') {
     return [
-      { key: 'ptasks', label: '任务', path: '/pages/provider/tasks' },
-      { key: 'pool', label: '接单池', path: '/pages/provider/pool' },
-      { key: 'mine', label: '我的', path: '/pages/mine/index' },
+      { key: 'ptasks', label: '任务', path: '/pages/provider/tasks', icon: 'list' },
+      { key: 'pool', label: '接单池', path: '/pages/provider/pool', icon: 'house' },
+      { key: 'mine', label: '我的', path: '/pages/mine/index', icon: 'user' },
     ]
   }
   return [
-    { key: 'index', label: '首页', path: '/pages/index/index' },
-    { key: 'orders', label: '订单', path: '/pages/order/list' },
-    { key: 'mine', label: '我的', path: '/pages/mine/index' },
+    { key: 'index', label: '首页', path: '/pages/index/index', icon: 'house' },
+    { key: 'orders', label: '订单', path: '/pages/order/list', icon: 'list' },
+    { key: 'mine', label: '我的', path: '/pages/mine/index', icon: 'user' },
   ]
 })
 
-function go(item: { key: string; label: string; path: string }) {
+function go(item: { key: string; path: string }) {
   if (item.key === props.current) return
   uni.reLaunch({ url: item.path })
 }
@@ -42,7 +43,25 @@ function go(item: { key: string; label: string; path: string }) {
       :class="{ active: item.key === current }"
       @tap="go(item)"
     >
-      <view class="mark" />
+      <!-- 房子 -->
+      <view v-if="item.icon === 'house'" class="ico house">
+        <view class="roof" />
+        <view class="wall" />
+      </view>
+
+      <!-- 清单 -->
+      <view v-else-if="item.icon === 'list'" class="ico list">
+        <view class="line" />
+        <view class="line" />
+        <view class="line" />
+      </view>
+
+      <!-- 人像 -->
+      <view v-else class="ico user">
+        <view class="head" />
+        <view class="shoulder" />
+      </view>
+
       <text class="label">{{ item.label }}</text>
     </view>
   </view>
@@ -54,10 +73,10 @@ function go(item: { key: string; label: string; path: string }) {
   left: 0;
   right: 0;
   bottom: 0;
-  height: 110rpx;
+  height: 108rpx;
   padding-bottom: constant(safe-area-inset-bottom);
   padding-bottom: env(safe-area-inset-bottom);
-  background: rgba(255, 255, 255, 0.96);
+  background: #fff;
   border-top: 1rpx solid var(--border);
   display: flex;
   align-items: center;
@@ -66,7 +85,71 @@ function go(item: { key: string; label: string; path: string }) {
 
 .tab {
   flex: 1;
-  height: 110rpx;
+  height: 108rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
+  color: #a8b0b8;
+}
+
+.tab.active {
+  color: var(--brand);
+}
+
+.label {
+  font-size: 22rpx;
+  color: inherit;
+}
+
+.tab.active .label {
+  font-weight: 600;
+}
+
+/* ---- 房子 ---- */
+.ico.house {
+  width: 42rpx;
+  height: 40rpx;
+  position: relative;
+}
+
+.house .roof {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 21rpx solid transparent;
+  border-right: 21rpx solid transparent;
+  border-bottom: 17rpx solid currentColor;
+}
+
+.house .wall {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 28rpx;
+  height: 22rpx;
+  border: 3rpx solid currentColor;
+  border-top: none;
+  border-radius: 0 0 4rpx 4rpx;
+  box-sizing: border-box;
+}
+
+.tab.active .house .wall {
+  background: currentColor;
+}
+
+/* ---- 清单 ---- */
+.ico.list {
+  width: 38rpx;
+  height: 40rpx;
+  border: 3rpx solid currentColor;
+  border-radius: 7rpx;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -74,26 +157,54 @@ function go(item: { key: string; label: string; path: string }) {
   gap: 6rpx;
 }
 
-.mark {
-  width: 12rpx;
-  height: 12rpx;
+.list .line {
+  width: 20rpx;
+  height: 3rpx;
+  background: currentColor;
+  border-radius: 2rpx;
+}
+
+.tab.active .ico.list {
+  background: currentColor;
+}
+
+.tab.active .list .line {
+  background: #fff;
+}
+
+/* ---- 人像 ---- */
+.ico.user {
+  width: 42rpx;
+  height: 40rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+}
+
+.user .head {
+  width: 17rpx;
+  height: 17rpx;
+  border: 3rpx solid currentColor;
   border-radius: 50%;
-  background: #d1d5db;
+  box-sizing: border-box;
 }
 
-.label {
-  font-size: 24rpx;
-  color: var(--text-sub);
-}
-
-.tab.active .mark {
-  background: var(--brand);
+.user .shoulder {
   width: 32rpx;
-  border-radius: 6rpx;
+  height: 17rpx;
+  border: 3rpx solid currentColor;
+  border-bottom: none;
+  border-radius: 18rpx 18rpx 0 0;
+  box-sizing: border-box;
 }
 
-.tab.active .label {
-  color: var(--brand);
-  font-weight: 600;
+.tab.active .user .head {
+  background: currentColor;
+}
+
+.tab.active .user .shoulder {
+  background: currentColor;
 }
 </style>

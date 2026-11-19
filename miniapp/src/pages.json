@@ -3,6 +3,7 @@
     {
       "path": "pages/index/index",
       "style": {
+        "navigationStyle": "custom",
         "navigationBarTitleText": "小区好帮手"
       }
     },

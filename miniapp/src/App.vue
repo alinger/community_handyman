@@ -15,20 +15,27 @@ onLaunch(async () => {
 </script>
 
 <style>
-/* 全局设计变量。uni-app 的 App.vue 样式会作用于所有页面。 */
+/*
+ * 设计 token 取自 docs/设计稿：主色深青绿 #0f7f78，
+ * 薄荷渐变 #87c9bd → #cbeae3，提示与费用块用暖米黄 #fef5e6。
+ * 全局改色只动这里，页面里不写死色值。
+ */
 page {
-  --brand: #16a34a;
-  --brand-dark: #15803d;
-  --brand-light: #dcfce7;
-  --text: #1f2937;
+  --brand: #0f7f78;
+  --brand-dark: #0b6b66;
+  --brand-light: #e4f3f0;
+  --brand-tint: #f2faf8;
+  --mint-1: #87c9bd;
+  --mint-2: #cbeae3;
+  --text: #1f2328;
   --text-sub: #6b7280;
-  --text-light: #9ca3af;
-  --bg: #f5f7fa;
+  --text-light: #9aa3ad;
+  --bg: #f8f8f5;
   --card: #ffffff;
-  --border: #e5e7eb;
-  --warn: #f59e0b;
-  --danger: #ef4444;
-  --info: #3b82f6;
+  --border: #eceef0;
+  --accent: #d97706;
+  --accent-soft: #fef5e6;
+  --danger: #dc2626;
 
   background-color: var(--bg);
   color: var(--text);
@@ -38,22 +45,21 @@ page {
 
 .page {
   min-height: 100vh;
-  padding-bottom: 140rpx; /* 给底部导航留位 */
+  padding-bottom: 150rpx;
   box-sizing: border-box;
 }
 
+/* 白卡：设计稿是纯白 + 几乎不可见的阴影，没有粗边框 */
 .card {
   background: var(--card);
-  border-radius: 24rpx;
-  padding: 32rpx;
-  margin: 0 24rpx 24rpx;
-  box-shadow: 0 2rpx 16rpx rgba(15, 23, 42, 0.04);
+  border-radius: 20rpx;
+  padding: 28rpx 30rpx;
+  margin: 0 24rpx 20rpx;
 }
 
 .section-title {
   font-size: 30rpx;
   font-weight: 600;
-  margin-bottom: 20rpx;
   color: var(--text);
 }
 
@@ -68,29 +74,31 @@ page {
   justify-content: space-between;
 }
 
+/* 主按钮：深青绿实心、圆角、通栏 */
 .btn-primary {
   background: var(--brand);
   color: #fff;
-  border-radius: 44rpx;
-  height: 88rpx;
-  line-height: 88rpx;
+  border-radius: 12rpx;
+  height: 92rpx;
+  line-height: 92rpx;
   text-align: center;
-  font-size: 30rpx;
+  font-size: 32rpx;
   font-weight: 500;
 }
 
 .btn-primary.is-disabled {
-  background: #d1d5db;
+  background: #cfd8d6;
 }
 
+/* 次按钮：白底 + 浅灰描边 */
 .btn-ghost {
   border: 1rpx solid var(--border);
   color: var(--text);
-  border-radius: 44rpx;
+  border-radius: 12rpx;
   height: 88rpx;
   line-height: 88rpx;
   text-align: center;
-  font-size: 30rpx;
+  font-size: 28rpx;
   background: #fff;
 }
 

@@ -316,7 +316,8 @@ const cancellable = computed(() => {
             <view class="node-body">
               <view class="node-label">{{ n.label }}</view>
               <view v-if="n.at" class="node-time">{{ n.at.slice(5, 16).replace('T', ' ') }}</view>
-              <view v-else class="node-time">待完成</view>
+              <!-- 未到达不写「待完成」：三个节点都这么写会显得像重复渲染 -->
+              <view v-else class="node-time placeholder" />
             </view>
           </view>
         </view>
@@ -452,35 +453,38 @@ const cancellable = computed(() => {
 }
 
 .status-hero {
-  margin: 0 24rpx 24rpx;
-  padding: 40rpx 32rpx;
-  border-radius: 24rpx;
-  background: linear-gradient(160deg, #16a34a, #15803d);
-  color: #fff;
+  margin: 20rpx 24rpx;
+  padding: 36rpx 32rpx;
+  border-radius: 22rpx;
+  background: linear-gradient(135deg, #e9f5f3 0%, #e4f3f0 100%);
+  color: #14413c;
 }
 
 .status-hero.st-pending_payment {
-  background: linear-gradient(160deg, #f59e0b, #d97706);
+  background: linear-gradient(135deg, #fef5e6 0%, #fdf0dd 100%);
+  color: #8a5a12;
 }
 
 .status-hero.st-completed {
-  background: linear-gradient(160deg, #64748b, #475569);
+  background: #f1f4f3;
+  color: #3f4a48;
 }
 
 .status-hero.st-canceled,
 .status-hero.st-rejected {
-  background: linear-gradient(160deg, #9ca3af, #6b7280);
+  background: #f4f5f6;
+  color: #7b8489;
 }
 
 .status-title {
   font-size: 40rpx;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .status-hint {
   margin-top: 12rpx;
-  font-size: 25rpx;
-  opacity: 0.9;
+  font-size: 24rpx;
+  opacity: 0.86;
   line-height: 1.5;
 }
 
@@ -561,6 +565,11 @@ const cancellable = computed(() => {
   font-size: 23rpx;
   color: var(--text-light);
   margin-top: 4rpx;
+  min-height: 30rpx;
+}
+
+.node-time.placeholder {
+  height: 30rpx;
 }
 
 .info-row {

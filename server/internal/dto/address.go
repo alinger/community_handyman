@@ -42,3 +42,13 @@ type CheckAreaReq struct {
 	Lane      string `json:"lane" binding:"max=64"`
 	HouseNo   string `json:"house_no" binding:"required,max=32"`
 }
+
+// SlotAvailability 某日某服务类型的时段余量，用于预约页把满员时段置灰。
+type SlotAvailability struct {
+	SlotCode string `json:"slot_code"`
+	Total    int    `json:"total"`
+	Used     int    `json:"used"`
+	// Remaining 剩余可约量，0 表示已满（前端置灰）
+	Remaining int  `json:"remaining"`
+	Available bool `json:"available"`
+}

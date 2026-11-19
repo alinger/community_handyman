@@ -134,6 +134,8 @@ function slotLabel(code: string): string {
 <style scoped>
 .page {
   padding-top: 24rpx;
+  /* 给固定 TabBar 留位置 */
+  padding-bottom: 160rpx;
 }
 
 .tip {

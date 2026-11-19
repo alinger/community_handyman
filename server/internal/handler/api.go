@@ -159,6 +159,40 @@ func (a *API) SetDefaultAddress(c *gin.Context) {
 	response.OK(c, out)
 }
 
+// DeleteAddress 删除地址。
+// @Summary      删除地址
+// @Description  只能删除本人地址；删除默认地址时自动把剩余最新一条提升为默认，返回删除后的地址列表
+// @Tags         地址
+// @Produce      json
+// @Param        id   path      int  true  "地址 ID"
+// @Success      200  {object}  response.Body  "data 为 dto.AddressResp 数组"
+// @Failure      200  {object}  response.Body  "1004 地址不存在"
+// @Security     UserID
+// @Router       /api/v1/addresses/{id} [delete]
+func (a *API) DeleteAddress(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		response.Fail(c, errs.BizMsg(errs.CodeInvalidParam, "地址 ID 不合法"))
+		return
+	}
+	uid := middleware.CurrentUserID(c)
+	if err := a.Address.Delete(c.Request.Context(), uid, id); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	// 直接返回剩余列表，前端删完不用再拉一次
+	list, err := a.Address.List(c.Request.Context(), uid)
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	out := make([]dto.AddressResp, 0, len(list))
+	for i := range list {
+		out = append(out, service.ToAddressResp(&list[i]))
+	}
+	response.OK(c, out)
+}
+
 // ListAddresses 地址列表。
 // @Summary      地址列表
 // @Tags         地址
@@ -242,6 +276,31 @@ func (a *API) AccompanyOptions(c *gin.Context) {
 		return
 	}
 	response.OK(c, opts)
+}
+
+// SlotAvailability 某日各时段余量（预约页据此把满员时段置灰）。
+// @Summary      时段余量
+// @Description  返回指定日期与服务类型的各时段库存；后台未配置该日库存时返回空数组，前端视为全部可选
+// @Tags         服务配置
+// @Produce      json
+// @Param        date         query  string  true  "服务日期 YYYY-MM-DD"
+// @Param        service_type query  string  true  "服务类型 garbage/dogwalk/accompany"
+// @Success      200  {object}  response.Body  "data 为 dto.SlotAvailability 数组"
+// @Security     UserID
+// @Router       /api/v1/services/slots [get]
+func (a *API) SlotAvailability(c *gin.Context) {
+	date := c.Query("date")
+	st := c.Query("service_type")
+	if date == "" || st == "" {
+		response.Fail(c, errs.BizMsg(errs.CodeInvalidParam, "缺少 date 或 service_type"))
+		return
+	}
+	list, err := a.Order.SlotAvailability(c.Request.Context(), date, model.ServiceType(st))
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, list)
 }
 
 // ---------- 订单 ----------

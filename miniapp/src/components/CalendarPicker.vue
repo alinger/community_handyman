@@ -7,6 +7,7 @@
  * 遛宠在工作日只开晚间，时段列表随日期动态变化。
  */
 import { computed, ref, watch } from 'vue'
+import { slotAvailability, type SlotAvailability } from '@/api'
 import { SLOTS } from '@/utils/format'
 
 const props = defineProps<{
@@ -138,10 +139,52 @@ const daySlots = computed(() => {
   return weekday ? SLOTS.filter((s) => s.code === '18-20') : SLOTS
 })
 
-// 换日期后原时段可能不可约，自动落到第一个可选项
-watch(daySlots, (list) => {
-  if (!list.some((s) => s.code === pickedSlot.value)) {
-    pickedSlot.value = list[0]?.code || ''
+/**
+ * 时段余量：只查当前选中日，满员时段置灰。
+ * 后端未配该日库存时返回空数组，此情况下按全部可约处理（与后端下单兜底一致）。
+ */
+const avail = ref<Record<string, SlotAvailability>>({})
+
+async function loadAvail() {
+  const date = pickedDate.value
+  if (!date) return
+  try {
+    const list = await slotAvailability(date, props.serviceType)
+    const map: Record<string, SlotAvailability> = {}
+    for (const s of list) map[s.slot_code] = s
+    // 请求回来时用户可能已切到别的日期，丢弃过期结果
+    if (date === pickedDate.value) avail.value = map
+  } catch (e) {
+    if (date === pickedDate.value) avail.value = {}
+  }
+}
+
+watch(
+  () => [props.visible, pickedDate.value, props.serviceType],
+  () => {
+    if (props.visible) loadAvail()
+  },
+  { immediate: true },
+)
+
+function slotFull(code: string): boolean {
+  const s = avail.value[code]
+  return s ? !s.available : false
+}
+
+function slotTip(code: string): string {
+  const s = avail.value[code]
+  if (!s) return ''
+  if (!s.available) return '已满'
+  if (s.remaining <= 2) return `余${s.remaining}`
+  return ''
+}
+
+// 换日期后原时段可能不可约或已满，自动落到第一个既开放又有余量的时段
+watch([daySlots, avail], () => {
+  const usable = daySlots.value.filter((s) => !slotFull(s.code))
+  if (!usable.some((s) => s.code === pickedSlot.value)) {
+    pickedSlot.value = usable[0]?.code || ''
   }
 })
 
@@ -207,14 +250,18 @@ function confirm() {
           v-for="s in daySlots"
           :key="s.code"
           class="slot-chip"
-          :class="{ active: pickedSlot === s.code }"
-          @tap="pickedSlot = s.code"
+          :class="{ active: pickedSlot === s.code, full: slotFull(s.code) }"
+          @tap="!slotFull(s.code) && (pickedSlot = s.code)"
         >
-          {{ s.label }}
+          <text>{{ s.label }}</text>
+          <text v-if="slotTip(s.code)" class="chip-tip">{{ slotTip(s.code) }}</text>
         </view>
       </view>
       <view v-if="serviceType === 'dogwalk'" class="slot-hint">
         遛宠工作日仅开放晚间时段，周末全天可约
+      </view>
+      <view v-else-if="daySlots.every((s) => slotFull(s.code))" class="slot-hint">
+        当日时段已约满，请换一天
       </view>
 
       <view class="btn-primary confirm" @tap="confirm">确定</view>
@@ -395,6 +442,10 @@ function confirm() {
   border-radius: 12rpx;
   font-size: 24rpx;
   color: var(--text-sub);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4rpx;
 }
 
 .slot-chip.active {
@@ -402,6 +453,26 @@ function confirm() {
   background: var(--brand-light);
   color: var(--brand-dark);
   font-weight: 600;
+}
+
+/* 满员：置灰不可点，划掉价格区避免误导 */
+.slot-chip.full {
+  background: #f6f7f8;
+  border-color: #eceff1;
+  color: #b6bec6;
+}
+
+.slot-chip.full text:first-child {
+  text-decoration: line-through;
+}
+
+.chip-tip {
+  font-size: 18rpx;
+  color: #b6bec6;
+}
+
+.slot-chip.active .chip-tip {
+  color: var(--brand-dark);
 }
 
 .slot-hint {

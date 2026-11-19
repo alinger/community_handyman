@@ -122,6 +122,21 @@ func (s *AddressService) List(ctx context.Context, userID uint64) ([]model.Addre
 	return list, nil
 }
 
+// Delete 删除用户地址。先校验归属再软删，删默认地址时仓储会自动提升下一条为默认。
+func (s *AddressService) Delete(ctx context.Context, userID, id uint64) error {
+	a, err := s.addresses.GetByID(ctx, userID, id)
+	if err != nil {
+		return errs.Wrap(errs.CodeInternal, err)
+	}
+	if a == nil {
+		return errs.BizMsg(errs.CodeNotFound, "地址不存在")
+	}
+	if err := s.addresses.Delete(ctx, userID, id); err != nil {
+		return errs.Wrap(errs.CodeInternal, err)
+	}
+	return nil
+}
+
 // ToAddressResp 转换为响应结构。
 func ToAddressResp(a *model.Address) dto.AddressResp {
 	return dto.AddressResp{

@@ -11,6 +11,7 @@ const showAdd = ref(false)
 const editingId = ref(0) // 0 表示新增，非 0 表示编辑该地址
 const saving = ref(false)
 const settingDefault = ref(0) // 正在设为默认的地址 id，防重复点击
+const deletingId = ref(0) // 正在删除的地址 id，防重复点击
 const checkMsg = ref<{ ok: boolean; text: string } | null>(null)
 const communities = ref<string[]>([])
 
@@ -145,6 +146,40 @@ async function onSetDefault(id: number) {
     settingDefault.value = 0
   }
 }
+
+/** 删除地址：删默认地址时后端会把剩余最新一条提升为默认 */
+async function onDelete(id: number) {
+  if (deletingId.value) return
+  const a = user.addresses.find((x) => x.id === id)
+  const confirmed = await new Promise<boolean>((resolve) => {
+    uni.showModal({
+      title: '删除该地址？',
+      content: a?.is_default
+        ? '这是你的默认地址，删除后会自动把另一条设为默认。'
+        : '删除后预约页将无法选择该地址。',
+      confirmText: '删除',
+      confirmColor: '#dc2626',
+      cancelText: '取消',
+      success: (r) => resolve(r.confirm),
+      fail: () => resolve(false),
+    })
+  })
+  if (!confirmed) return
+
+  deletingId.value = id
+  try {
+    await user.removeAddress(id)
+    uni.showToast({ title: '已删除', icon: 'success' })
+  } catch (e) {
+    uni.showModal({
+      title: '删除失败',
+      content: e instanceof ApiError ? e.message : '请稍后重试',
+      showCancel: false,
+    })
+  } finally {
+    deletingId.value = 0
+  }
+}
 </script>
 
 <template>
@@ -176,6 +211,9 @@ async function onSetDefault(id: number) {
           @tap="onSetDefault(a.id)"
         >{{ settingDefault === a.id ? '设置中…' : '设置默认' }}</text>
         <text class="action-btn" @tap="openEdit(a.id)">编辑</text>
+        <text class="action-btn danger" @tap="onDelete(a.id)">
+          {{ deletingId === a.id ? '删除中…' : '删除' }}
+        </text>
       </view>
     </view>
 
@@ -316,6 +354,11 @@ async function onSetDefault(id: number) {
   background: var(--brand-dark);
   color: #fff;
   border-color: var(--brand-dark);
+}
+
+.action-btn.danger {
+  color: var(--danger);
+  border-color: #fecaca;
 }
 
 .add-wrap {

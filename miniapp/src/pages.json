@@ -50,6 +50,12 @@
       }
     },
     {
+      "path": "pages/doc/index",
+      "style": {
+        "navigationBarTitleText": "服务条款"
+      }
+    },
+    {
       "path": "pages/address/index",
       "style": {
         "navigationBarTitleText": "地址管理"

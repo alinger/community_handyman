@@ -147,3 +147,32 @@ func (r *AddressRepo) ListByUser(ctx context.Context, userID uint64) ([]model.Ad
 	err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("is_default DESC, id DESC").Find(&list).Error
 	return list, err
 }
+
+// Delete 软删除地址。删掉的是默认地址时，把剩余最新一条提升为默认，
+// 避免用户删完默认地址后 currentAddress 为空导致无法下单。
+func (r *AddressRepo) Delete(ctx context.Context, userID, id uint64) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var a model.Address
+		if err := tx.Where("id = ? AND user_id = ?", id, userID).First(&a).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return gorm.ErrRecordNotFound
+			}
+			return err
+		}
+		if err := tx.Delete(&model.Address{}, id).Error; err != nil {
+			return err
+		}
+		if !a.IsDefault {
+			return nil
+		}
+		var next model.Address
+		err := tx.Where("user_id = ?", userID).Order("id DESC").First(&next).Error
+		if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return nil // 用户没有其它地址了，无需提升
+			}
+			return err
+		}
+		return tx.Model(&model.Address{}).Where("id = ?", next.ID).Update("is_default", true).Error
+	})
+}

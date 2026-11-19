@@ -7,6 +7,7 @@ import { SLOTS } from '@/utils/format'
 
 const user = useUserStore()
 const statusBarHeight = ref(0)
+const menuOpen = ref(false)
 
 /**
  * 服务入口。
@@ -52,9 +53,29 @@ function goMine() {
   uni.reLaunch({ url: '/pages/mine/index' })
 }
 
+/** 汉堡菜单：常用入口侧边抽屉，替代原先的「功能开发中」空提示 */
 function openMenu() {
-  uni.showToast({ title: '更多功能开发中', icon: 'none' })
+  menuOpen.value = true
 }
+
+function closeMenu() {
+  menuOpen.value = false
+}
+
+function fromMenu(fn: () => void) {
+  closeMenu()
+  // 等抽屉收起动画结束再跳转，避免跳转被遮罩打断
+  setTimeout(fn, 160)
+}
+
+const menuItems = [
+  { icon: '📋', label: '我的订单', go: () => uni.reLaunch({ url: '/pages/order/list' }) },
+  { icon: '📍', label: '常用地址', go: () => uni.navigateTo({ url: '/pages/address/index' }) },
+  { icon: '⚙️', label: '设置', go: () => uni.navigateTo({ url: '/pages/settings/index' }) },
+  { icon: '📄', label: '服务条款', go: () => uni.navigateTo({ url: '/pages/doc/index?type=terms' }) },
+  { icon: '🔒', label: '隐私政策', go: () => uni.navigateTo({ url: '/pages/doc/index?type=privacy' }) },
+  { icon: '☎️', label: '联系客服', go: () => uni.showModal({ title: '联系客服', content: '客服电话：021-0000 0000（工作日 9:00-18:00）', showCancel: false }) },
+]
 </script>
 
 <template>
@@ -142,6 +163,32 @@ function openMenu() {
     </view>
 
     <TabBar current="index" />
+
+    <!-- 汉堡菜单抽屉 -->
+    <view v-if="menuOpen" class="drawer-mask" @tap="closeMenu">
+      <view class="drawer" @tap.stop>
+        <view class="drawer-head" :style="{ paddingTop: statusBarHeight + 20 + 'px' }">
+          <view class="drawer-avatar">{{ (user.nickname || '住')[0] }}</view>
+          <view class="drawer-info">
+            <view class="drawer-name">{{ user.nickname || '住户' }}</view>
+            <view class="drawer-addr">{{ user.currentAddress?.community || '未设置地址' }}</view>
+          </view>
+        </view>
+        <view class="drawer-list">
+          <view
+            v-for="m in menuItems"
+            :key="m.label"
+            class="drawer-item"
+            @tap="fromMenu(m.go)"
+          >
+            <text class="drawer-icon">{{ m.icon }}</text>
+            <text class="drawer-label">{{ m.label }}</text>
+            <text class="chev">›</text>
+          </view>
+        </view>
+        <view class="drawer-foot">小区好帮手 · v1.0.0</view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -482,5 +529,105 @@ function openMenu() {
   font-size: 24rpx;
   color: #b45309;
   font-weight: 500;
+}
+
+/* ---------- 汉堡菜单抽屉 ---------- */
+.drawer-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 300;
+  display: flex;
+}
+
+.drawer {
+  width: 560rpx;
+  height: 100%;
+  background: #fff;
+  border-radius: 0 28rpx 28rpx 0;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  padding: 0 32rpx 32rpx;
+  background: linear-gradient(135deg, #e9f5f3 0%, #f5fbfa 100%);
+}
+
+.drawer-avatar {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--brand-dark);
+  font-size: 36rpx;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.drawer-info {
+  min-width: 0;
+}
+
+.drawer-name {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.drawer-addr {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: var(--text-sub);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.drawer-list {
+  flex: 1;
+  padding: 12rpx 16rpx;
+}
+
+.drawer-item {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  padding: 26rpx 16rpx;
+  border-radius: 14rpx;
+}
+
+.drawer-item:active {
+  background: #f5f8f7;
+}
+
+.drawer-icon {
+  font-size: 30rpx;
+  width: 40rpx;
+  text-align: center;
+}
+
+.drawer-label {
+  flex: 1;
+  font-size: 28rpx;
+  color: var(--text);
+}
+
+.drawer .chev {
+  color: var(--text-light);
+}
+
+.drawer-foot {
+  text-align: center;
+  font-size: 21rpx;
+  color: var(--text-light);
+  padding: 24rpx 0;
 }
 </style>

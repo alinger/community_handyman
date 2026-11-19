@@ -1,5 +1,13 @@
 import { defineStore } from 'pinia'
-import { devLogin, getMe, listAddresses, setDefaultAddress as apiSetDefault, updateMe, type Address } from '@/api'
+import {
+  deleteAddress as apiDeleteAddress,
+  devLogin,
+  getMe,
+  listAddresses,
+  setDefaultAddress as apiSetDefault,
+  updateMe,
+  type Address,
+} from '@/api'
 import { getUserId, setUserId, clearUserId } from '@/utils/request'
 
 const KEY_OPENID = 'ch_openid'
@@ -102,6 +110,17 @@ export const useUserStore = defineStore('user', {
     async setDefaultAddress(id: number) {
       this.addresses = await apiSetDefault(id)
       this.currentAddressId = id
+      return this.addresses
+    },
+
+    /** 删除地址：后端返回剩余列表，删默认地址时会自动提升下一条 */
+    async removeAddress(id: number) {
+      this.addresses = await apiDeleteAddress(id)
+      const stillExists = this.addresses.some((a) => a.id === this.currentAddressId)
+      if (!stillExists) {
+        const def = this.addresses.find((a) => a.is_default)
+        this.currentAddressId = def ? def.id : this.addresses[0]?.id || 0
+      }
       return this.addresses
     },
 

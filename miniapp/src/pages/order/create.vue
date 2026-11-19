@@ -9,11 +9,13 @@ import {
   createOrder,
   listCommunities,
   previewOrder,
+  slotAvailability,
   updateAddress,
   type AccompanyHospital,
   type AccompanyServiceItem,
   type CreateOrderPayload,
   type PreviewResp,
+  type SlotAvailability,
 } from '@/api'
 import { useUserStore } from '@/store/user'
 import { availableSlots, nextDays, price, SLOTS } from '@/utils/format'
@@ -88,6 +90,39 @@ const slots = computed(() =>
   form.serviceType === 'dogwalk' ? availableSlots(form.serviceDate) : SLOTS,
 )
 
+/**
+ * 时段余量：满员时段置灰不可选。
+ * 后端未配该日库存时返回空数组，此时视为全部可选（与后端下单兜底一致）。
+ */
+const slotAvail = ref<Record<string, SlotAvailability>>({})
+
+async function loadSlotAvail() {
+  try {
+    const list = await slotAvailability(form.serviceDate, form.serviceType)
+    const map: Record<string, SlotAvailability> = {}
+    for (const s of list) map[s.slot_code] = s
+    slotAvail.value = map
+  } catch (e) {
+    // 库存查询失败不阻塞下单：交给后端在提交时兜底
+    slotAvail.value = {}
+  }
+}
+
+/** 某时段是否可约：无库存记录视为可约 */
+function slotUsable(code: string): boolean {
+  const s = slotAvail.value[code]
+  return s ? s.available : true
+}
+
+/** 剩余量文案，只在快满时才提示，避免每个时段都堆数字 */
+function slotHint(code: string): string {
+  const s = slotAvail.value[code]
+  if (!s) return ''
+  if (!s.available) return '已约满'
+  if (s.remaining <= 2) return `余 ${s.remaining}`
+  return ''
+}
+
 const addressText = computed(() => {
   const a = user.currentAddress
   if (!a) return ''
@@ -119,6 +154,7 @@ onLoad(async (query) => {
     console.warn('[create] 初始化失败', e)
   }
   await loadAccompanyOptions()
+  await loadSlotAvail()
   syncSlot()
   refreshPreview()
 })
@@ -159,16 +195,20 @@ function toggleServiceItem(code: string) {
   else form.serviceItems.push(code)
 }
 
+/** 选中项失效时回落到第一个仍可约的时段，全部约满则清空以触发提交拦截 */
 function syncSlot() {
-  const list = slots.value
-  if (!list.some((s) => s.code === form.slotCode)) {
-    form.slotCode = list.length ? list[0].code : ''
+  const usable = slots.value.filter((s) => slotUsable(s.code))
+  if (!usable.some((s) => s.code === form.slotCode)) {
+    form.slotCode = usable.length ? usable[0].code : ''
   }
 }
 
 watch(
-  () => form.serviceDate,
-  () => syncSlot(),
+  () => [form.serviceDate, form.serviceType],
+  async () => {
+    await loadSlotAvail()
+    syncSlot()
+  },
 )
 
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -199,7 +239,7 @@ function buildPayload(): CreateOrderPayload | null {
     address_id: addr.id,
     service_type: form.serviceType,
     service_date: form.serviceDate,
-    slot_code: form.slotCode || slots.value[0]?.code || '',
+    slot_code: form.slotCode || slots.value.filter((s) => slotUsable(s.code))[0]?.code || '',
     remark: form.remark,
   }
 
@@ -383,8 +423,13 @@ async function submit() {
     return
   }
   if (!form.slotCode) {
-    uni.showToast({ title: '请选择服务时间', icon: 'none' })
-    showCalendar.value = true
+    // 区分「没选」与「所选日期已全部约满」，后者要让用户换日期而不是重选时段
+    const allFull = slots.value.length > 0 && !slots.value.some((s) => slotUsable(s.code))
+    uni.showToast({
+      title: allFull ? '该日期已约满，请换个日期' : '请选择服务时间',
+      icon: 'none',
+    })
+    if (!allFull) showCalendar.value = true
     return
   }
   if (form.serviceType === 'accompany') {

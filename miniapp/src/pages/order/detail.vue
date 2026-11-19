@@ -6,9 +6,11 @@ import {
   cancelOrder,
   confirmOrder,
   listRecords,
+  monthlyDetail,
   orderDetail,
   payOrder,
   uploadRecord,
+  type MonthlySummary,
   type Order,
   type ServiceRecord,
 } from '@/api'
@@ -20,6 +22,7 @@ const user = useUserStore()
 const orderNo = ref('')
 const order = ref<Order | null>(null)
 const records = ref<ServiceRecord[]>([])
+const monthly = ref<MonthlySummary | null>(null)
 const loading = ref(true)
 const acting = ref(false)
 const uploading = ref(false)
@@ -83,6 +86,10 @@ async function load() {
     // 已完成的订单才有服务记录可看
     if (order.value.status === 'completed' || order.value.status === 'pending_confirm') {
       records.value = await listRecords(orderNo.value).catch(() => [])
+    }
+    // 包月订单额外拉本周期核销进度（单次订单没有这个区块）
+    if (order.value.plan === 'monthly') {
+      monthly.value = await monthlyDetail(orderNo.value).catch(() => null)
     }
   } catch (e) {
     uni.showToast({ title: e instanceof ApiError ? e.message : '加载失败', icon: 'none' })
@@ -295,6 +302,12 @@ const cancellable = computed(() => {
   const s = order.value?.status
   return s === 'pending_payment' || s === 'pending_accept' || s === 'accepted'
 })
+
+/** 进度条宽度，total 为 0 时按 0% 处理避免除零 */
+function pct(used: number, total: number): string {
+  if (!total) return '0%'
+  return `${Math.min(100, Math.round((used / total) * 100))}%`
+}
 </script>
 
 <template>
@@ -330,6 +343,42 @@ const cancellable = computed(() => {
             </view>
           </view>
         </view>
+      </view>
+
+      <!-- 包月核销进度 -->
+      <view v-if="monthly" class="card">
+        <view class="row">
+          <view class="section-title">包月服务进度</view>
+          <text class="monthly-range">{{ monthly.start_date }} 至 {{ monthly.end_date }}</text>
+        </view>
+        <view class="monthly-stat">
+          <view class="mstat">
+            <view class="mnum">{{ monthly.used }}</view>
+            <view class="mlabel">已使用</view>
+          </view>
+          <view class="mstat">
+            <view class="mnum highlight">{{ monthly.remaining }}</view>
+            <view class="mlabel">剩余次数</view>
+          </view>
+          <view class="mstat">
+            <view class="mnum">{{ monthly.total }}</view>
+            <view class="mlabel">周期总额</view>
+          </view>
+        </view>
+        <view class="mbar">
+          <view class="mbar-fill" :style="{ width: pct(monthly.used, monthly.total) }" />
+        </view>
+        <view class="mhint">
+          当日未使用的次数不累计、不顺延，过期作废
+        </view>
+        <template v-if="monthly.redemptions?.length">
+          <view class="divider" />
+          <view class="section-sub">核销记录</view>
+          <view v-for="r in monthly.redemptions" :key="r.id" class="red-row">
+            <text class="red-date">{{ r.service_date }}</text>
+            <text class="red-remark">{{ r.remark || '已上门服务' }}</text>
+          </view>
+        </template>
       </view>
 
       <!-- 服务信息 -->
@@ -653,6 +702,92 @@ const cancellable = computed(() => {
   height: 1rpx;
   background: #f3f4f6;
   margin: 12rpx 0;
+}
+
+/* ---------- 包月核销进度 ---------- */
+.monthly-range {
+  font-size: 21rpx;
+  color: var(--text-light);
+}
+
+.monthly-stat {
+  display: flex;
+  margin: 8rpx 0 20rpx;
+}
+
+.mstat {
+  flex: 1;
+  text-align: center;
+}
+
+.mnum {
+  font-size: 42rpx;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.mnum.highlight {
+  color: var(--brand);
+}
+
+.mlabel {
+  margin-top: 6rpx;
+  font-size: 21rpx;
+  color: var(--text-light);
+}
+
+.mbar {
+  height: 10rpx;
+  border-radius: 6rpx;
+  background: #eef2f1;
+  overflow: hidden;
+}
+
+.mbar-fill {
+  height: 100%;
+  border-radius: 6rpx;
+  background: linear-gradient(90deg, #4cb3aa 0%, var(--brand) 100%);
+  transition: width 0.3s ease;
+}
+
+.mhint {
+  margin-top: 14rpx;
+  font-size: 21rpx;
+  color: var(--text-light);
+}
+
+.section-sub {
+  font-size: 25rpx;
+  font-weight: 600;
+  color: var(--text-sub);
+  margin: 16rpx 0 10rpx;
+}
+
+.red-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 20rpx;
+  padding: 14rpx 0;
+  border-bottom: 1rpx solid #f6f7f8;
+  font-size: 24rpx;
+}
+
+.red-row:last-child {
+  border-bottom: none;
+}
+
+.red-date {
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.red-remark {
+  color: var(--text-light);
+  text-align: right;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .total {

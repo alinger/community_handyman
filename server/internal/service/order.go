@@ -638,3 +638,32 @@ func nilIfZero(f float64) *float64 {
 	}
 	return &f
 }
+
+// SlotAvailability 返回某天某服务类型的时段余量，供预约页把满员时段置灰。
+// 后台没配该日库存时返回空列表：前端按"全部时段可选"处理，
+// 与下单时后端兜底（库存记录不存在则拒绝）保持一致。
+func (s *OrderService) SlotAvailability(ctx context.Context, dateStr string, st model.ServiceType) ([]dto.SlotAvailability, error) {
+	date, err := model.ParseDate(dateStr)
+	if err != nil {
+		return nil, errs.BizMsg(errs.CodeInvalidParam, "日期格式应为 YYYY-MM-DD")
+	}
+	list, err := s.slots.ListByDate(ctx, date, st)
+	if err != nil {
+		return nil, errs.Wrap(errs.CodeInternal, err)
+	}
+	out := make([]dto.SlotAvailability, 0, len(list))
+	for _, s := range list {
+		remaining := s.Total - s.Used
+		if remaining < 0 {
+			remaining = 0
+		}
+		out = append(out, dto.SlotAvailability{
+			SlotCode:  s.SlotCode,
+			Total:     s.Total,
+			Used:      s.Used,
+			Remaining: remaining,
+			Available: remaining > 0,
+		})
+	}
+	return out, nil
+}

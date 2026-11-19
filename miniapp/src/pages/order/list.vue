@@ -201,6 +201,8 @@ function onAction(o: Order, key: string) {
 <style scoped>
 .page {
   padding-top: 20rpx;
+  /* 给固定 TabBar 留位置 */
+  padding-bottom: 160rpx;
 }
 
 /* ---------- 分段控制器 ---------- */

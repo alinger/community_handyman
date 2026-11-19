@@ -218,6 +218,26 @@ export function setDefaultAddress(id: number) {
   return request<Address[]>({ url: `/api/v1/addresses/${id}/default`, method: 'PUT' })
 }
 
+/** 删除地址，返回删除后的剩余列表（删默认地址时后端会自动提升下一条为默认） */
+export function deleteAddress(id: number) {
+  return request<Address[]>({ url: `/api/v1/addresses/${id}`, method: 'DELETE' })
+}
+
+/** 时段余量：满员时段前端置灰不可选 */
+export interface SlotAvailability {
+  slot_code: string
+  total: number
+  used: number
+  remaining: number
+  available: boolean
+}
+
+export function slotAvailability(date: string, serviceType: string) {
+  return request<SlotAvailability[]>({
+    url: `/api/v1/services/slots?date=${date}&service_type=${serviceType}`,
+  })
+}
+
 /** 陪诊可选项：医院、可多选服务项与默认必选的基础费，由后台配置 */
 export function accompanyOptions() {
   return request<AccompanyOptions>({ url: '/api/v1/services/accompany/options' })

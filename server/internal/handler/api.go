@@ -121,6 +121,37 @@ func (a *API) UpdateAddress(c *gin.Context) {
 	response.OK(c, service.ToAddressResp(addr))
 }
 
+// SetDefaultAddress 把某条地址设为默认。
+// @Summary      设置默认地址
+// @Description  设为默认后该用户其它地址自动取消默认，返回更新后的地址列表
+// @Tags         地址
+// @Produce      json
+// @Param        id   path      int  true  "地址 ID"
+// @Success      200  {object}  response.Body  "data 为 dto.AddressResp 数组"
+// @Security     UserID
+// @Router       /api/v1/addresses/{id}/default [put]
+func (a *API) SetDefaultAddress(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		response.Fail(c, errs.BizMsg(errs.CodeInvalidParam, "地址 ID 不合法"))
+		return
+	}
+	if err := a.Address.SetDefault(c.Request.Context(), middleware.CurrentUserID(c), id); err != nil {
+		response.Fail(c, err)
+		return
+	}
+	list, err := a.Address.List(c.Request.Context(), middleware.CurrentUserID(c))
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	out := make([]dto.AddressResp, 0, len(list))
+	for i := range list {
+		out = append(out, service.ToAddressResp(&list[i]))
+	}
+	response.OK(c, out)
+}
+
 // ListAddresses 地址列表。
 // @Summary      地址列表
 // @Tags         地址

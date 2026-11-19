@@ -54,9 +54,35 @@ type AddressRepo struct {
 
 func NewAddressRepo(db *gorm.DB) *AddressRepo { return &AddressRepo{db: db} }
 
-// Create 保存地址。
+// Create 保存地址。用户首条地址自动设为默认，保证任何时刻都有默认地址可用。
 func (r *AddressRepo) Create(ctx context.Context, a *model.Address) error {
-	return r.db.WithContext(ctx).Create(a).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var count int64
+		if err := tx.Model(&model.Address{}).Where("user_id = ?", a.UserID).Count(&count).Error; err != nil {
+			return err
+		}
+		a.IsDefault = count == 0
+		return tx.Create(a).Error
+	})
+}
+
+// SetDefault 把指定地址设为默认，事务内先清除该用户其它地址的默认标记。
+// GetByID 已在 service 层校验归属，这里再带 user_id 条件防越权。
+func (r *AddressRepo) SetDefault(ctx context.Context, userID, id uint64) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&model.Address{}).
+			Where("id = ? AND user_id = ?", id, userID).
+			Update("is_default", true)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return tx.Model(&model.Address{}).
+			Where("user_id = ? AND id <> ?", userID, id).
+			Update("is_default", false).Error
+	})
 }
 
 // GetByID 按主键查询，同时校验归属，避免越权读取他人地址。
@@ -99,6 +125,6 @@ func (r *AddressRepo) Update(ctx context.Context, userID uint64, a *model.Addres
 // ListByUser 返回用户的全部地址，默认地址优先。
 func (r *AddressRepo) ListByUser(ctx context.Context, userID uint64) ([]model.Address, error) {
 	var list []model.Address
-	err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("id DESC").Find(&list).Error
+	err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("is_default DESC, id DESC").Find(&list).Error
 	return list, err
 }

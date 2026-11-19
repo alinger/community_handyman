@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { devLogin, listAddresses, type Address } from '@/api'
+import { devLogin, listAddresses, setDefaultAddress as apiSetDefault, type Address } from '@/api'
 import { getUserId, setUserId, clearUserId } from '@/utils/request'
 
 const KEY_OPENID = 'ch_openid'
@@ -79,11 +79,15 @@ export const useUserStore = defineStore('user', {
       this.ready = true
     },
 
-    /** 加载地址列表，默认选中第一个 */
+    /** 加载地址列表，默认项以后端 is_default 为准（列表已按默认优先排序） */
     async loadAddresses() {
       const list = await listAddresses()
       this.addresses = list || []
-      if (!this.currentAddressId && this.addresses.length) {
+      const def = this.addresses.find((a) => a.is_default)
+      const stillExists = this.addresses.some((a) => a.id === this.currentAddressId)
+      if (def) {
+        this.currentAddressId = def.id
+      } else if (!stillExists && this.addresses.length) {
         this.currentAddressId = this.addresses[0].id
       }
       return this.addresses
@@ -91,6 +95,13 @@ export const useUserStore = defineStore('user', {
 
     setCurrentAddress(id: number) {
       this.currentAddressId = id
+    },
+
+    /** 设为默认地址：持久化到后端，并用返回列表刷新本地状态 */
+    async setDefaultAddress(id: number) {
+      this.addresses = await apiSetDefault(id)
+      this.currentAddressId = id
+      return this.addresses
     },
 
     /**

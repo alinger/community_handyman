@@ -31,6 +31,7 @@ type AddressResp struct {
 	Extra         string `json:"extra"`
 	ContactName   string `json:"contact_name"`
 	ContactPhone  string `json:"contact_phone"`
+	IsDefault     bool   `json:"is_default"`
 	InServiceArea bool   `json:"in_service_area"`
 }
 

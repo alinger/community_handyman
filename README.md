@@ -12,7 +12,7 @@ server/              服务端（Go + Gin + GORM + MySQL）
 ├── migrations/      golang-migrate SQL
 └── configs/         配置文件
 miniapp/             用户端小程序（uni-app + Vue3 + TypeScript）
-├── src/pages       首页、预约、订单列表、订单详情、我的
+├── src/pages       首页、预约、订单列表、订单详情、我的、地址管理
 ├── src/api         接口封装（与 swagger.json 对齐）
 ├── src/store       Pinia 状态
 └── src/utils       请求层与格式化
@@ -23,9 +23,9 @@ docs/                产品文档、设计稿与页面截图
 
 ## 页面
 
-| 首页 | 预约 | 日历选择 | 陪诊服务（基础费必选） | 地址选择 | 地址编辑 | 订单详情 |
+| 首页 | 预约 | 日历选择 | 陪诊服务（基础费必选） | 地址管理 | 地址选择 | 订单详情 |
 |---|---|---|---|---|---|---|
-| ![](docs/screenshots/01-首页.jpg) | ![](docs/screenshots/02-预约表单.jpg) | ![](docs/screenshots/09-日历选择.jpg) | ![](docs/screenshots/10-陪诊服务.jpg) | ![](docs/screenshots/12-地址选择.jpg) | ![](docs/screenshots/11-地址编辑.jpg) | ![](docs/screenshots/04-订单详情.jpg) |
+| ![](docs/screenshots/01-首页.jpg) | ![](docs/screenshots/02-预约表单.jpg) | ![](docs/screenshots/09-日历选择.jpg) | ![](docs/screenshots/10-陪诊服务.jpg) | ![](docs/screenshots/15-地址管理.jpg) | ![](docs/screenshots/12-地址选择.jpg) | ![](docs/screenshots/04-订单详情.jpg) |
 
 ## 快速开始
 

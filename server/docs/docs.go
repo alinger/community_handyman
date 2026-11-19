@@ -716,6 +716,40 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/addresses/{id}/default": {
+            "put": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "设为默认后该用户其它地址自动取消默认，返回更新后的地址列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "地址"
+                ],
+                "summary": "设置默认地址",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "地址 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data 为 dto.AddressResp 数组",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/dev/login": {
             "post": {
                 "description": "按 openid 取或建用户，仅在 env=dev 时注册该路由",

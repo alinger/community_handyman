@@ -12,6 +12,7 @@ export interface Address {
   extra: string
   contact_name: string
   contact_phone: string
+  is_default: boolean
   in_service_area: boolean
 }
 
@@ -192,6 +193,11 @@ export function updateAddress(
   },
 ) {
   return request<Address>({ url: `/api/v1/addresses/${id}`, method: 'PUT', data })
+}
+
+/** 设为默认地址，返回更新后的地址列表（默认项已排在最前） */
+export function setDefaultAddress(id: number) {
+  return request<Address[]>({ url: `/api/v1/addresses/${id}/default`, method: 'PUT' })
 }
 
 /** 陪诊可选项：医院、可多选服务项与默认必选的基础费，由后台配置 */

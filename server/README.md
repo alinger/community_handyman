@@ -44,6 +44,7 @@ curl http://127.0.0.1:8080/healthz
 | GET | `/api/v1/addresses` | 地址列表 |
 | GET | `/api/v1/addresses/communities` | 可选小区列表（后台配置的启用范围按小区去重） |
 | PUT | `/api/v1/addresses/:id` | 编辑本人地址，重新校验归属与服务范围 |
+| PUT | `/api/v1/addresses/:id/default` | 设为默认地址，事务内互斥清除该用户其它默认，返回更新后的列表 |
 | POST | `/api/v1/addresses/check` | 地址范围预校验（小区+门牌，路弄可空） |
 | POST | `/api/v1/orders/preview` | 费用试算，不落库 |
 | POST | `/api/v1/orders` | 下单，返回支付参数 |

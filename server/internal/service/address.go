@@ -95,6 +95,24 @@ func (s *AddressService) Update(ctx context.Context, userID, id uint64, req dto.
 	return a, nil
 }
 
+// SetDefault 把用户的某条地址设为默认。先校验归属，再由仓储在事务内互斥置位。
+func (s *AddressService) SetDefault(ctx context.Context, userID, id uint64) error {
+	a, err := s.addresses.GetByID(ctx, userID, id)
+	if err != nil {
+		return errs.Wrap(errs.CodeInternal, err)
+	}
+	if a == nil {
+		return errs.BizMsg(errs.CodeNotFound, "地址不存在")
+	}
+	if a.IsDefault {
+		return nil
+	}
+	if err := s.addresses.SetDefault(ctx, userID, id); err != nil {
+		return errs.Wrap(errs.CodeInternal, err)
+	}
+	return nil
+}
+
 // List 返回用户地址列表。
 func (s *AddressService) List(ctx context.Context, userID uint64) ([]model.Address, error) {
 	list, err := s.addresses.ListByUser(ctx, userID)
@@ -114,6 +132,7 @@ func ToAddressResp(a *model.Address) dto.AddressResp {
 		Extra:         a.Extra,
 		ContactName:   a.ContactName,
 		ContactPhone:  a.ContactPhone,
+		IsDefault:     a.IsDefault,
 		InServiceArea: a.InServiceArea,
 	}
 }

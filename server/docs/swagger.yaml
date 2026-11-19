@@ -712,6 +712,27 @@ paths:
       summary: 编辑地址
       tags:
       - 地址
+  /api/v1/addresses/{id}/default:
+    put:
+      description: 设为默认后该用户其它地址自动取消默认，返回更新后的地址列表
+      parameters:
+      - description: 地址 ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data 为 dto.AddressResp 数组
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - UserID: []
+      summary: 设置默认地址
+      tags:
+      - 地址
   /api/v1/addresses/check:
     post:
       consumes:

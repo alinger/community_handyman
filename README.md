@@ -16,16 +16,24 @@ miniapp/             用户端小程序（uni-app + Vue3 + TypeScript）
 ├── src/api         接口封装（与 swagger.json 对齐）
 ├── src/store       Pinia 状态
 └── src/utils       请求层与格式化
+admin/               运营后台前端（Vue3 + Vite + Element Plus + Pinia）
+├── src/api         接口封装（Bearer token + 统一响应解包）
+├── src/views       订单/服务范围/时段库存/服务与价格
+└── src/store       登录态
 docs/                产品文档、设计稿与页面截图
 ```
-
-> 运营后台前端尚未开工，后台接口已就绪。
 
 ## 页面
 
 | 首页 | 预约 | 日历选择 | 陪诊服务（基础费必选） | 地址管理 | 地址选择 | 订单详情 |
 |---|---|---|---|---|---|---|
 | ![](docs/screenshots/01-首页.jpg) | ![](docs/screenshots/02-预约表单.jpg) | ![](docs/screenshots/09-日历选择.jpg) | ![](docs/screenshots/10-陪诊服务.jpg) | ![](docs/screenshots/15-地址管理.jpg) | ![](docs/screenshots/12-地址选择.jpg) | ![](docs/screenshots/04-订单详情.jpg) |
+
+运营后台：
+
+| 登录 | 订单管理 | 服务范围 | 时段库存 | 服务与价格 | 派单 |
+|---|---|---|---|---|---|
+| ![](docs/screenshots-admin/01-登录.jpg) | ![](docs/screenshots-admin/02-订单管理.jpg) | ![](docs/screenshots-admin/03-服务范围.jpg) | ![](docs/screenshots-admin/04-时段库存.jpg) | ![](docs/screenshots-admin/05-服务与价格.jpg) | ![](docs/screenshots-admin/06-派单弹层.jpg) |
 
 ## 快速开始
 
@@ -60,6 +68,17 @@ npm run build:mp-weixin # 生产构建
 
 开发期不接微信登录，启动时用固定 openid 调 `/api/v1/dev/login` 自动建号；支付走沙箱 `mock-pay` 接口。接入商户号后替换 `src/store/user.ts` 的 `ensureLogin` 与 `startPay` 即可，页面不用改。
 
+### 运营后台
+
+```bash
+cd admin
+npm install
+npm run dev       # 浏览器预览 http://127.0.0.1:5174，/api 走 vite proxy 到 8080
+npm run build     # 类型检查 + 生产构建到 dist/
+```
+
+账号密码用 `cd server && make seed-admin user=admin`（密码读 `.env` 的 `ADMIN_PASSWORD`）。登录后即可管理订单（查询/派单/退款/核销/历史报价）、服务范围、时段库存、服务价格与计价规则。退款仅超管角色可用。
+
 接口文档：服务启动后访问 `/swagger/index.html`（生产环境自动关闭）。改动注解后执行 `make doc` 重新生成。
 
 ## 技术栈
@@ -81,6 +100,6 @@ npm run build:mp-weixin # 生产构建
 
 ## 当前进度
 
-已完成：下单支付闭环、履约（接单/节点/服务记录）、运营后台接口、包月核销、陪诊按项自动计价、用户端小程序五个页面。
+已完成：下单支付闭环、履约（接单/节点/服务记录）、运营后台接口 + 前端、包月核销、陪诊按项自动计价、用户端小程序六个页面（含地址管理）。
 
-待办：运营后台前端、服务方端页面、微信登录与真实支付（需商户资质）、AC 全量回归。
+待办：微信登录与真实支付（需商户资质）、AC 全量回归、运营后台前端的视觉精修与权限细化。

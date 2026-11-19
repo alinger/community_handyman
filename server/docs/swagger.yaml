@@ -528,6 +528,20 @@ paths:
       summary: 包月核销
       tags:
       - 运营后台
+  /api/admin/providers:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: data 为 dto.ProviderOption 数组
+          schema:
+            $ref: '#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body'
+      security:
+      - AdminToken: []
+      summary: 可派单服务方列表
+      tags:
+      - 运营后台
   /api/admin/refunds:
     post:
       consumes:

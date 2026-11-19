@@ -230,6 +230,22 @@ func (a *API) AdminListOrders(c *gin.Context) {
 	response.Page(c, out, total, page, size)
 }
 
+// AdminListProviders 可派单的服务方列表。
+// @Summary      可派单服务方列表
+// @Tags         运营后台
+// @Produce      json
+// @Success      200  {object}  response.Body  "data 为 dto.ProviderOption 数组"
+// @Security     AdminToken
+// @Router       /api/admin/providers [get]
+func (a *API) AdminListProviders(c *gin.Context) {
+	list, err := a.Admin.ListProviders(c.Request.Context())
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, list)
+}
+
 // AdminAssign 派单或改派。
 // @Summary      派单或改派
 // @Description  仅待接单的订单可派

@@ -355,6 +355,30 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/admin/providers": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营后台"
+                ],
+                "summary": "可派单服务方列表",
+                "responses": {
+                    "200": {
+                        "description": "data 为 dto.ProviderOption 数组",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/api/admin/refunds": {
             "post": {
                 "security": [

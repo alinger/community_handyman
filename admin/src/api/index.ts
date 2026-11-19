@@ -1,0 +1,235 @@
+/**
+ * 运营后台接口封装。字段与 server/docs/swagger.json 及 dto/model 对齐。
+ * 统一响应 { code, message, data }，code=0 为成功；分页 data={list,total,page,size}。
+ */
+import axios, { type InternalAxiosRequestConfig, type AxiosResponse } from 'axios'
+import { ElMessage } from 'element-plus'
+
+const TOKEN_KEY = 'ch_admin_token'
+
+export function getToken(): string {
+  return localStorage.getItem(TOKEN_KEY) || ''
+}
+export function setToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token)
+}
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY)
+}
+
+interface ApiBody<T> {
+  code: number
+  message: string
+  request_id?: string
+  data?: T
+}
+
+export interface PageData<T> {
+  list: T[]
+  total: number
+  page: number
+  size: number
+}
+
+export class ApiError extends Error {
+  constructor(public code: number, message: string) {
+    super(message)
+  }
+}
+
+const http = axios.create({
+  baseURL: '/',
+  timeout: 15000,
+})
+
+http.interceptors.request.use((cfg: InternalAxiosRequestConfig) => {
+  const token = getToken()
+  if (token) cfg.headers.set('Authorization', `Bearer ${token}`)
+  return cfg
+})
+
+http.interceptors.response.use(
+  (res: AxiosResponse<ApiBody<unknown>>) => {
+    const body = res.data
+    if (body && typeof body === 'object' && 'code' in body) {
+      if (body.code === 0) return res
+      return Promise.reject(new ApiError(body.code, body.message || '请求失败'))
+    }
+    return Promise.reject(new ApiError(-1, '响应格式异常'))
+  },
+  (err) => {
+    const status = err?.response?.status
+    const body = err?.response?.data as ApiBody<unknown> | undefined
+    if (status === 401) {
+      clearToken()
+      ElMessage.error('登录已过期，请重新登录')
+      if (location.hash !== '#/login') location.hash = '#/login'
+    } else if (body?.message) {
+      ElMessage.error(body.message)
+    } else {
+      ElMessage.error(err?.message || '网络异常')
+    }
+    return Promise.reject(err)
+  },
+)
+
+async function request<T>(url: string, method = 'GET', data?: unknown): Promise<T> {
+  const res = await http.request<ApiBody<T>>({ url, method, data })
+  return res.data.data as T
+}
+
+// ---------- 类型 ----------
+
+export interface AdminUser {
+  id: number
+  username: string
+  role: string
+}
+export interface LoginResp {
+  token: string
+  expires_in: number
+  admin: AdminUser
+}
+
+export interface ServiceArea {
+  id: number
+  community: string
+  lane: string
+  house_from: number
+  house_to: number
+  house_parity: string
+  status: number
+  effective_at?: string | null
+}
+export interface CreateAreaPayload {
+  community: string
+  lane: string
+  house_from: number
+  house_to: number
+  house_parity: 'all' | 'odd' | 'even'
+}
+
+export interface SlotInventory {
+  id: number
+  service_date: string
+  slot_code: string
+  service_type: string
+  total: number
+  used: number
+}
+export interface SetSlotItem {
+  slot_code: string
+  service_type: string
+  total: number
+}
+
+export interface ServiceSku {
+  id: number
+  service_type: string
+  plan: string
+  base_price: number
+  rules: Record<string, unknown>
+  slots: unknown
+  status: number
+}
+
+export interface ProviderOption {
+  id: number
+  nickname: string
+  openid: string
+}
+
+export interface PriceItem {
+  name: string
+  amount: number
+  note?: string
+}
+export interface OrderNode {
+  node: string
+  label: string
+  reached: boolean
+  at?: string | null
+  remark?: string
+}
+export interface AddressResp {
+  id: number
+  community: string
+  lane: string
+  house_no: string
+  extra: string
+  contact_name: string
+  contact_phone: string
+  is_default: boolean
+  in_service_area: boolean
+}
+export interface Order {
+  order_no: string
+  service_type: string
+  plan: string
+  service_date: string
+  slot_code: string
+  status: string
+  status_label: string
+  tab: string
+  nodes: OrderNode[]
+  total_amount: number
+  paid_amount: number
+  remark: string
+  created_at: string
+  address?: AddressResp
+  price_items?: PriceItem[]
+  hospital?: string
+  patient_name?: string
+  accompany_items?: PriceItem[]
+}
+
+// ---------- 接口 ----------
+
+export const login = (username: string, password: string) =>
+  request<LoginResp>('/api/admin/login', 'POST', { username, password })
+
+export const listAreas = () => request<ServiceArea[]>('/api/admin/areas')
+export const createArea = (data: CreateAreaPayload) => request<ServiceArea>('/api/admin/areas', 'POST', data)
+export const setAreaStatus = (id: number, status: 0 | 1) =>
+  request<{ id: number; status: number }>(`/api/admin/areas/${id}/status`, 'PATCH', { status })
+
+export const listSlots = (date: string) => request<SlotInventory[]>(`/api/admin/slots?date=${encodeURIComponent(date)}`)
+export const setSlots = (date: string, items: SetSlotItem[]) =>
+  request<SlotInventory[]>('/api/admin/slots', 'PUT', { date, items })
+
+export const listSkus = () => request<ServiceSku[]>('/api/admin/skus')
+export const updateSku = (id: number, basePrice: number, rules: Record<string, unknown>) =>
+  request<{ id: number; base_price: number }>(`/api/admin/skus/${id}`, 'PUT', { base_price: basePrice, rules })
+
+export const listProviders = () => request<ProviderOption[]>('/api/admin/providers')
+
+export interface OrderQuery {
+  status?: string
+  service_type?: string
+  keyword?: string
+  page?: number
+  size?: number
+}
+export const listOrders = (q: OrderQuery) => {
+  const params = new URLSearchParams()
+  Object.entries(q).forEach(([k, v]) => {
+    if (v !== undefined && v !== '' && v !== null) params.set(k, String(v))
+  })
+  return request<PageData<Order>>(`/api/admin/orders?${params.toString()}`)
+}
+export const assignOrder = (orderNo: string, providerId: number) =>
+  request<{ assigned: boolean; provider_id: number }>(`/api/admin/orders/${orderNo}/assign`, 'POST', { provider_id: providerId })
+export const refund = (orderNo: string, amount: number, reason: string) =>
+  request<{ out_refund_no: string; amount: number; status: string }>('/api/admin/refunds', 'POST', {
+    order_no: orderNo,
+    amount,
+    reason,
+  })
+export const redeem = (orderNo: string, date: string, remark: string) =>
+  request<unknown>(`/api/admin/orders/${orderNo}/redeem`, 'POST', { date, remark })
+export const quote = (orderNo: string, amount: number, durationMin: number, note: string) =>
+  request<unknown>(`/api/admin/orders/${orderNo}/quote`, 'POST', {
+    amount,
+    duration_min: durationMin,
+    note,
+  })

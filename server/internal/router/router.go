@@ -169,6 +169,7 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 			authedAdmin.PUT("/skus/:id", api.AdminUpdateSku)
 
 			authedAdmin.GET("/orders", api.AdminListOrders)
+			authedAdmin.GET("/providers", api.AdminListProviders)
 			authedAdmin.POST("/orders/:orderNo/assign", api.AdminAssign)
 			authedAdmin.POST("/orders/:orderNo/quote", api.AdminCreateQuote)
 			authedAdmin.POST("/orders/:orderNo/redeem", api.AdminRedeem)

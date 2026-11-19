@@ -87,6 +87,13 @@ type UpdateSkuReq struct {
 	Rules     json.RawMessage `json:"rules" swaggertype:"object"`
 }
 
+// ProviderOption 派单可选服务方。
+type ProviderOption struct {
+	ID       uint64 `json:"id"`
+	Nickname string `json:"nickname"`
+	OpenID   string `json:"openid"`
+}
+
 // AdminLoginReq 后台登录。
 type AdminLoginReq struct {
 	Username string `json:"username" binding:"required,max=32" example:"admin"`

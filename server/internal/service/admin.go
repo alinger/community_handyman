@@ -35,6 +35,22 @@ func NewAdminService(db *gorm.DB, admins *repository.AdminUserRepo, areas *repos
 		skus: skus, orders: orders, secret: secret, tokenTTL: ttl}
 }
 
+// ListProviders 返回可派单的服务方，供后台派单下拉选人。
+func (s *AdminService) ListProviders(ctx context.Context) ([]dto.ProviderOption, error) {
+	var users []model.User
+	if err := s.db.WithContext(ctx).
+		Where("role = ?", "provider").
+		Order("id").
+		Find(&users).Error; err != nil {
+		return nil, errs.Wrap(errs.CodeInternal, err)
+	}
+	out := make([]dto.ProviderOption, 0, len(users))
+	for _, u := range users {
+		out = append(out, dto.ProviderOption{ID: u.ID, Nickname: u.Nickname, OpenID: u.OpenID})
+	}
+	return out, nil
+}
+
 // Login 校验账号密码并签发 token。
 // 密码错误与账号不存在返回同一提示，避免被用来枚举用户名。
 func (s *AdminService) Login(ctx context.Context, username, password string) (string, *model.AdminUser, error) {

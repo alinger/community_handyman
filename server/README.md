@@ -79,6 +79,7 @@ curl http://127.0.0.1:8080/healthz
 | GET | `/api/admin/skus` | 服务产品列表 |
 | PUT | `/api/admin/skus/:id` | 改价与计价规则（rules 部分合并） |
 | GET | `/api/admin/orders` | 订单查询（status / service_type / keyword） |
+| GET | `/api/admin/providers` | 可派单服务方列表（供后台派单下拉选人） |
 | POST | `/api/admin/orders/:orderNo/assign` | 派单或改派 |
 | POST | `/api/admin/refunds` | 退款（**仅 admin 角色**，amount=0 为全额） |
 | POST | `/api/admin/orders/:orderNo/quote` | 历史陪诊报价（兼容金额为 0 的旧订单；新订单自动计价，调用返回 2003） |

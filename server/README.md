@@ -78,7 +78,7 @@ curl http://127.0.0.1:8080/healthz
 | PUT | `/api/admin/slots` | 批量设置可接单量（total=0 即不开放） |
 | GET | `/api/admin/skus` | 服务产品列表 |
 | PUT | `/api/admin/skus/:id` | 改价与计价规则（rules 部分合并） |
-| GET | `/api/admin/orders` | 订单查询（status / service_type / keyword） |
+| GET | `/api/admin/orders` | 订单查询（status / service_type / keyword；含下单用户/服务方昵称、已退金额、取消原因、支付/完成时间等扩展字段） |
 | GET | `/api/admin/providers` | 可派单服务方列表（供后台派单下拉选人） |
 | POST | `/api/admin/orders/:orderNo/assign` | 派单或改派 |
 | POST | `/api/admin/refunds` | 退款（**仅 admin 角色**，amount=0 为全额） |

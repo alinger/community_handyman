@@ -9,6 +9,7 @@ import (
 	"github.com/alinger/community-handyman/server/internal/errs"
 	"github.com/alinger/community-handyman/server/internal/middleware"
 	"github.com/alinger/community-handyman/server/internal/model"
+	"github.com/alinger/community-handyman/server/internal/service"
 	"github.com/alinger/community-handyman/server/pkg/response"
 )
 
@@ -260,6 +261,11 @@ func (a *API) fillAdminOrderExt(ctx context.Context, orders []model.Order, outs 
 		r.CancelReason = o.CancelReason
 		r.PaidAt = o.PaidAt
 		r.FinishedAt = o.FinishedAt
+		if o.Plan == model.PlanMonthly {
+			start := o.ServiceDate.Time()
+			r.MonthlyStart = start.Format("2006-01-02")
+			r.MonthlyEnd = start.AddDate(0, 0, service.MonthlyDays-1).Format("2006-01-02")
+		}
 	}
 }
 

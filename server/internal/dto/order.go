@@ -77,6 +77,8 @@ type OrderResp struct {
 	CancelReason    string     `json:"cancel_reason,omitempty"`
 	PaidAt          *time.Time `json:"paid_at,omitempty"`
 	FinishedAt      *time.Time `json:"finished_at,omitempty"`
+	MonthlyStart    string     `json:"monthly_start,omitempty"`
+	MonthlyEnd      string     `json:"monthly_end,omitempty"`
 }
 
 // QuoteResp 陪诊报价。Confirmed 为真表示用户已确认并去支付。

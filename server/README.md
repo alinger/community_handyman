@@ -93,7 +93,7 @@ curl http://127.0.0.1:8080/healthz
 | GET | `/api/admin/users` | 用户/服务方分页（role / keyword） |
 | PATCH | `/api/admin/users/:id/role` | 角色切换（user ↔ provider，切换后即可被派单） |
 | PATCH | `/api/admin/users/:id/status` | 封禁/解封（封禁后小程序端拒绝登录） |
-| GET | `/api/admin/redemptions` | 月卡核销记录（按服务日期筛选） |
+| GET | `/api/admin/redemptions` | 月卡核销记录（按服务日期筛选）（含所属订单的包月开始/结束日期） |
 | PUT | `/api/admin/areas/:id` | 修改服务范围规则 |
 | POST | `/api/admin/slots/copy` | 时段模板复制（源日配置 → 多个目标日期） |
 | GET | `/api/admin/export/orders` | 订单 CSV 导出（同列表筛选，带 BOM） |

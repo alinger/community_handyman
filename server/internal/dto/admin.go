@@ -116,6 +116,8 @@ type AdminRedemptionRow struct {
 	ID          uint64    `json:"id"`
 	OrderNo     string    `json:"order_no"`
 	ServiceDate string    `json:"service_date"`
+	StartDate   string    `json:"start_date"`
+	EndDate     string    `json:"end_date"`
 	OperatorID  uint64    `json:"operator_id"`
 	Remark      string    `json:"remark"`
 	CreatedAt   time.Time `json:"created_at"`

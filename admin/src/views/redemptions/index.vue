@@ -48,6 +48,12 @@ onMounted(load)
     <el-table v-loading="loading" :data="list" stripe>
       <el-table-column prop="id" label="ID" width="70" />
       <el-table-column prop="order_no" label="订单号" min-width="200" />
+      <el-table-column label="包月周期" width="210">
+        <template #default="{ row }">
+          <span v-if="row.start_date">{{ row.start_date }} ~ {{ row.end_date }}</span>
+          <span v-else class="muted">-</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="service_date" label="服务日期" width="120" />
       <el-table-column label="核销人" width="90">
         <template #default="{ row }">#{{ row.operator_id }}</template>
@@ -70,5 +76,6 @@ onMounted(load)
 <style scoped>
 .filter { margin-bottom: 4px; }
 .hint { margin-bottom: 12px; }
+.muted { color: #9aa3ad; }
 .pager { margin-top: 14px; justify-content: flex-end; }
 </style>

@@ -193,6 +193,8 @@ export interface Order {
   cancel_reason?: string
   paid_at?: string
   finished_at?: string
+  monthly_start?: string
+  monthly_end?: string
 }
 
 // ---------- 接口 ----------
@@ -362,6 +364,8 @@ export interface AdminRedemption {
   id: number
   order_no: string
   service_date: string
+  start_date?: string
+  end_date?: string
   operator_id: number
   remark: string
   created_at: string

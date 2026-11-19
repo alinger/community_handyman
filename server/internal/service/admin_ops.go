@@ -320,22 +320,32 @@ func (s *AdminService) ListRedemptions(ctx context.Context, date string, page, s
 		ids = append(ids, r.OrderID)
 	}
 	orderNoMap := map[uint64]string{}
+	periodMap := map[uint64][2]string{}
 	if len(ids) > 0 {
 		var os []model.Order
-		if err := s.db.WithContext(ctx).Select("id, order_no").Where("id IN ?", ids).Find(&os).Error; err != nil {
+		if err := s.db.WithContext(ctx).Select("id, order_no, service_date").Where("id IN ?", ids).Find(&os).Error; err != nil {
 			return nil, 0, errs.Wrap(errs.CodeInternal, err)
 		}
 		for _, o := range os {
 			orderNoMap[o.ID] = o.OrderNo
+			start := o.ServiceDate.Time()
+			periodMap[o.ID] = [2]string{
+				start.Format("2006-01-02"),
+				start.AddDate(0, 0, MonthlyDays-1).Format("2006-01-02"),
+			}
 		}
 	}
 	out := make([]dto.AdminRedemptionRow, 0, len(list))
 	for _, r := range list {
-		out = append(out, dto.AdminRedemptionRow{
+		row := dto.AdminRedemptionRow{
 			ID: r.ID, OrderNo: orderNoMap[r.OrderID],
 			ServiceDate: r.ServiceDate.Time().Format("2006-01-02"),
 			OperatorID:  r.OperatorID, Remark: r.Remark, CreatedAt: r.CreatedAt,
-		})
+		}
+		if p, ok := periodMap[r.OrderID]; ok {
+			row.StartDate, row.EndDate = p[0], p[1]
+		}
+		out = append(out, row)
 	}
 	return out, total, nil
 }

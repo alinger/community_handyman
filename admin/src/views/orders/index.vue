@@ -182,12 +182,21 @@ async function doRefund() {
 
 // ---- 包月核销 ----
 const redeemVisible = ref(false)
-const redeemForm = reactive({ orderNo: '', date: '', remark: '' })
+const redeemForm = reactive({ orderNo: '', date: '', remark: '', start: '', end: '' })
 async function openRedeem(o: Order) {
   redeemForm.orderNo = o.order_no
   redeemForm.date = o.service_date || new Date().toISOString().slice(0, 10)
   redeemForm.remark = ''
+  redeemForm.start = o.monthly_start || ''
+  redeemForm.end = o.monthly_end || ''
   redeemVisible.value = true
+}
+// 包月核销只能选服务周期内、且不晚于今天的日期（与后端校验一致）
+const TODAY = new Date()
+const redeemDisabledDate = (d: Date) => {
+  if (redeemForm.start && d < new Date(`${redeemForm.start}T00:00:00`)) return true
+  if (redeemForm.end && d > new Date(`${redeemForm.end}T23:59:59`)) return true
+  return d.getTime() > TODAY.getTime()
 }
 async function doRedeem() {
   if (!redeemForm.date) {
@@ -560,8 +569,17 @@ async function onExport() {
 
     <!-- 核销 -->
     <el-dialog v-model="redeemVisible" title="包月核销" width="440px">
+      <p v-if="redeemForm.start" class="dialog-hint">
+        包月服务周期：<b>{{ redeemForm.start }} ~ {{ redeemForm.end }}</b>（30 天，不累计不顺延）。
+        核销日期只能选周期内且不晚于今天的日期。
+      </p>
       <el-form label-width="90px">
-        <el-form-item label="核销日期"><el-date-picker v-model="redeemForm.date" type="date" value-format="YYYY-MM-DD" style="width: 100%" /></el-form-item>
+        <el-form-item label="核销日期">
+          <el-date-picker
+            v-model="redeemForm.date" type="date" value-format="YYYY-MM-DD"
+            :disabled-date="redeemDisabledDate" style="width: 100%"
+          />
+        </el-form-item>
         <el-form-item label="备注"><el-input v-model="redeemForm.remark" placeholder="如：首日服务完成" /></el-form-item>
       </el-form>
       <template #footer>

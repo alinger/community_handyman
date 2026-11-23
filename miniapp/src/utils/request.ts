@@ -52,8 +52,8 @@ export const APP_ENV = (import.meta.env.VITE_APP_ENV as string | undefined)?.tri
  *   VITE_API_BASE 为空 → H5 留空走同源 proxy（免跨域）；小程序回落到本机 8080
  * 临时连测试服：VITE_API_BASE=https://test.xxx.com npm run build:mp-weixin
  */
-// const BUILD_BASE = (import.meta.env.VITE_API_BASE as string) || (isH5 ? 'http://127.0.0.1:8080' : 'https://m.yubangbzz.com')
-const BUILD_BASE = (import.meta.env.VITE_API_BASE as string) || (isH5 ? '' : 'http://127.0.0.1:8080')
+const BUILD_BASE = (import.meta.env.VITE_API_BASE as string) || (isH5 ? 'http://127.0.0.1:8080' : 'https://m.yubangbzz.com')
+// const BUILD_BASE = (import.meta.env.VITE_API_BASE as string) || (isH5 ? '' : 'http://127.0.0.1:8080')
 
 /** 构建期的环境名（本地 / 生产），自定义构建可能为空 */
 const BUILD_ENV_NAME = APP_ENV || '构建默认'

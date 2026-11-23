@@ -18,11 +18,15 @@ const (
 	CodePhoneTaken       = 1005
 	CodeAddressOutOfArea = 2001
 	CodeSlotFull         = 2002
-	CodeIllegalStatus    = 2003
-	CodePayTimeout       = 2004
-	CodePayFailed        = 3001
-	CodeRefundFailed     = 3002
-	CodeInternal         = 5000
+	// CodeQuotaExhausted 免费次数已用完，需改买包月
+	CodeQuotaExhausted = 2005
+	CodeIllegalStatus  = 2003
+	CodePayTimeout     = 2004
+	CodePayFailed      = 3001
+	CodeRefundFailed   = 3002
+	CodeSmsSendFailed  = 3003
+	CodeSmsCodeInvalid = 3004
+	CodeInternal       = 5000
 )
 
 var messages = map[int]string{
@@ -34,10 +38,13 @@ var messages = map[int]string{
 	CodePhoneTaken:       "该手机号已注册，请直接登录",
 	CodeAddressOutOfArea: "该地址暂未开通服务",
 	CodeSlotFull:         "该时段已约满，请选择其他时段",
+	CodeQuotaExhausted:   "免费次数已用完",
 	CodeIllegalStatus:    "当前订单状态不允许此操作",
 	CodePayTimeout:       "支付超时，订单已关闭",
 	CodePayFailed:        "微信支付下单失败",
 	CodeRefundFailed:     "退款失败",
+	CodeSmsSendFailed:    "短信发送失败，请稍后重试",
+	CodeSmsCodeInvalid:   "验证码错误或已失效，请重新获取",
 	CodeInternal:         "服务异常，请稍后再试",
 }
 
@@ -100,7 +107,7 @@ func HTTPStatus(code int) int {
 		return http.StatusForbidden
 	case CodeNotFound:
 		return http.StatusNotFound
-	case CodePayFailed, CodeRefundFailed, CodeInternal:
+	case CodePayFailed, CodeRefundFailed, CodeSmsSendFailed, CodeInternal:
 		return http.StatusInternalServerError
 	default:
 		return http.StatusOK

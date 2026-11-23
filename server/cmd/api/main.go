@@ -1,6 +1,6 @@
 // Command api 启动 HTTP 服务。
 //
-// @title           小区好帮手 API
+// @title           邻有回应 API
 // @version         1.1
 // @description     社区生活服务预约平台后端接口：地址范围校验、下单支付、履约、运营后台。
 // @description     用户端需 X-User-Id（接入微信登录后改为 Bearer JWT）；后台需 Bearer token。
@@ -32,6 +32,7 @@ import (
 	"github.com/alinger/community-handyman/server/internal/repository"
 	"github.com/alinger/community-handyman/server/internal/router"
 	"github.com/alinger/community-handyman/server/internal/service"
+	"github.com/alinger/community-handyman/server/internal/sms"
 	"github.com/alinger/community-handyman/server/internal/storage"
 	"github.com/alinger/community-handyman/server/pkg/logger"
 
@@ -63,9 +64,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	smsSender, err := sms.New(sms.Options{
+		Provider:        cfg.SMS.Provider,
+		AccessKeyID:     cfg.SMS.AccessKeyID,
+		AccessKeySecret: cfg.SMS.AccessKeySecret,
+		SignName:        cfg.SMS.SignName,
+		TemplateCode:    cfg.SMS.TemplateCode,
+		Endpoint:        cfg.SMS.Endpoint,
+		Log:             log,
+	})
+	if err != nil {
+		log.Error("短信渠道初始化失败", "err", err)
+		os.Exit(1)
+	}
+
 	log.Info("服务启动中",
 		"app", cfg.App.Name, "env", cfg.App.Env, "dsn", cfg.MaskedDSN(),
-		"payment", gw.Name(), "storage", store.Name())
+		"payment", gw.Name(), "storage", store.Name(), "sms", smsSender.Name())
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -86,7 +101,7 @@ func main() {
 		log.Info("数据库连接成功")
 	}
 
-	engine, deps := router.New(cfg, db, gw, store)
+	engine, deps := router.New(cfg, db, gw, store, smsSender)
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
 		Handler:      engine,
@@ -97,6 +112,15 @@ func main() {
 	// 超时关单任务：每 60 秒扫描一次，关闭未支付订单并释放库存
 	if deps.Order != nil {
 		go runCloseExpired(ctx, deps.Order, log)
+	}
+
+	// 启动时清一次历史验证码记录，避免表随发送量增长
+	if deps.SMS != nil {
+		if n, err := deps.SMS.PurgeExpired(ctx); err != nil {
+			log.Warn("清理历史验证码失败", "err", err)
+		} else if n > 0 {
+			log.Info("已清理历史验证码", "count", n)
+		}
 	}
 
 	errCh := make(chan error, 1)

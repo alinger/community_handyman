@@ -15,6 +15,21 @@ const ruleError = ref('')
 const typeLabel = (t: string) => ({ garbage: '代倒垃圾', dogwalk: '遛宠', accompany: '陪诊服务' }[t] || t)
 const planLabel = (p: string) => (p === 'monthly' ? '包月' : '单次')
 const money = (fen: number) => `¥${(fen / 100).toFixed(2)}`
+/** 时段码格式，必须与服务端 slotRange 的解析格式一致，否则下单时才报错 */
+const SLOT_RE = /^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/
+
+/** 多行文本转时段数组：容忍换行/逗号分隔，去重保序 */
+function parseSlotLines(text: string): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of text.split(/[\n,，;；]/)) {
+    const v = raw.trim()
+    if (!v || seen.has(v)) continue
+    seen.add(v)
+    out.push(v)
+  }
+  return out
+}
 const toYuan = (fen: unknown) => (typeof fen === 'number' ? fen / 100 : 0)
 const toFen = (yuan: number) => Math.round(yuan * 100)
 
@@ -75,7 +90,13 @@ function summaryLines(sku: ServiceSku): string[] {
   }
   // 垃圾
   if (sku.plan === 'monthly') {
-    return [`每日上限 ${numS(r.daily_limit, 1)} 次 · ${r.carry_over === true ? '次数可结转' : '次数不可结转'}`]
+    const extras = Array.isArray(r.extra_slot_options) ? (r.extra_slot_options as string[]) : []
+    return [
+      `${fen2(r.monthly_price)}/月 · ${numS(r.duration_days, 30)} 天`,
+      `默认取件 ${typeof r.default_slot === 'string' && r.default_slot ? r.default_slot : '22:00-22:30'}` +
+        (extras.length ? ` · 可选 ${extras.join(' / ')}` : ''),
+      `每日上限 ${numS(r.daily_limit, 1)} 次 · ${r.carry_over === true ? '次数可结转' : '次数不可结转'}`,
+    ]
   }
   return [
     `按袋计价 · 基础价含 ${numS(r.bags_included, 1)} 袋，超袋 ${fen2(r.extra_bag)}/袋`,
@@ -97,12 +118,17 @@ function detailRows(sku: ServiceSku): KV[] {
   if (sku.service_type === 'dogwalk') {
     const out: KV[] = []
     for (const k of Object.keys(DOG_PRICE_LABELS)) out.push({ label: DOG_PRICE_LABELS[k]! + '（元）', value: fen2(r[k]) })
-    for (const k of Object.keys(DOG_COUNT_LABELS)) out.push({ label: DOG_COUNT_LABELS[k]!, value: numS(r[k], 0) })
+    for (const k of Object.keys(DOG_COUNT_LABELS)) out.push({ label: DOG_COUNT_LABELS[k]! + '', value: numS(r[k], 0) })
     return out
   }
   // 垃圾
   if (sku.plan === 'monthly') {
+    const extras = Array.isArray(r.extra_slot_options) ? (r.extra_slot_options as string[]) : []
     return [
+      { label: '包月价', value: fen2(r.monthly_price) + ' / 月' },
+      { label: '服务天数', value: numS(r.duration_days, 30) + ' 天' },
+      { label: '默认取件时段', value: typeof r.default_slot === 'string' && r.default_slot ? r.default_slot : '22:00-22:30' },
+      { label: '可选额外时段', value: extras.length ? extras.join(' / ') : '—' },
       { label: '每日次数上限', value: numS(r.daily_limit, 1) },
       { label: '次数可结转', value: r.carry_over === true ? '是' : '否' },
     ]
@@ -131,7 +157,12 @@ const form = reactive({
   dogCount: { max_minutes: 120, base_minutes: 20, step_minutes: 10, familiar_free_orders: 5, distance_threshold_km: 3 } as Record<string, number>,
   holidayDates: [] as string[],
   // 垃圾
-  garbage: { unit: 'bag', bags_included: 1, extra_bagYuan: 0, monthly_priceYuan: 0, monthly_daily_limit: 1, carry_over: false, daily_limit: 1 },
+  garbage: {
+    unit: 'bag', bags_included: 1, extra_bagYuan: 0,
+    monthly_priceYuan: 0, monthly_daily_limit: 1, carry_over: false, daily_limit: 1,
+    // 包月：服务天数、默认取件时段、可选额外时段（一行一个）
+    duration_days: 30, default_slot: '22:00-22:30', extraSlotText: '',
+  },
 })
 
 const isAccompany = computed(() => editing.value?.service_type === 'accompany')
@@ -193,6 +224,12 @@ function openEdit(sku: ServiceSku) {
   form.garbage.monthly_daily_limit = typeof r.monthly_daily_limit === 'number' ? r.monthly_daily_limit : 1
   form.garbage.carry_over = r.carry_over === true
   form.garbage.daily_limit = typeof r.daily_limit === 'number' ? r.daily_limit : 1
+  form.garbage.duration_days = typeof r.duration_days === 'number' ? r.duration_days : 30
+  form.garbage.default_slot =
+    typeof r.default_slot === 'string' && r.default_slot ? r.default_slot : '22:00-22:30'
+  form.garbage.extraSlotText = Array.isArray(r.extra_slot_options)
+    ? (r.extra_slot_options as string[]).join('\n')
+    : ''
 
   visible.value = true
 }
@@ -221,6 +258,12 @@ function buildRules(): Record<string, unknown> {
     out.holiday_dates = [...form.holidayDates].sort()
   } else if (isGarbage.value) {
     if (editing.value?.plan === 'monthly') {
+      // 这四项是 GarbagePlan 真正读取的配置（包月价、服务天数、默认时段、额外时段），
+      // 之前只能改数据库，运营改价要发版。
+      out.monthly_price = toFen(form.garbage.monthly_priceYuan)
+      out.duration_days = form.garbage.duration_days
+      out.default_slot = form.garbage.default_slot.trim()
+      out.extra_slot_options = parseSlotLines(form.garbage.extraSlotText)
       out.carry_over = form.garbage.carry_over
       out.daily_limit = form.garbage.daily_limit
     } else {
@@ -257,6 +300,26 @@ function removeServiceItem(i: number) {
 
 async function save() {
   if (!editing.value) return
+
+  // 结构化模式下先校验包月时段：格式错了要等到用户下单才炸，很难查
+  if (!advanced.value && isGarbage.value && editing.value.plan === 'monthly') {
+    const def = form.garbage.default_slot.trim()
+    if (!SLOT_RE.test(def)) {
+      ElMessage.error('默认取件时段格式应为 HH:MM-HH:MM，例如 22:00-22:30')
+      return
+    }
+    const extras = parseSlotLines(form.garbage.extraSlotText)
+    const bad = extras.find((s) => !SLOT_RE.test(s))
+    if (bad) {
+      ElMessage.error(`额外时段「${bad}」格式应为 HH:MM-HH:MM`)
+      return
+    }
+    if (extras.includes(def)) {
+      ElMessage.error('额外时段不能与默认时段相同')
+      return
+    }
+  }
+
   let rules: Record<string, unknown>
   if (advanced.value) {
     try {
@@ -437,6 +500,28 @@ async function save() {
             <!-- 垃圾 -->
             <template v-else-if="isGarbage">
               <template v-if="editing.plan === 'monthly'">
+                <el-form-item label="包月价">
+                  <el-input-number v-model="form.garbage.monthly_priceYuan" :min="0" :precision="2" :step="10" style="width: 200px" />
+                  <span class="hint">元 / 月，用户端下单页直接展示这个价</span>
+                </el-form-item>
+                <el-form-item label="服务天数">
+                  <el-input-number v-model="form.garbage.duration_days" :min="1" :max="365" style="width: 200px" />
+                  <span class="hint">天，下单后按此推算服务期结束日</span>
+                </el-form-item>
+                <el-form-item label="默认取件时段">
+                  <el-input v-model="form.garbage.default_slot" placeholder="22:00-22:30" style="width: 200px" />
+                  <span class="hint">HH:MM-HH:MM，包月订单不选时段时用它</span>
+                </el-form-item>
+                <el-form-item label="可选额外时段">
+                  <el-input
+                    v-model="form.garbage.extraSlotText"
+                    type="textarea"
+                    :rows="4"
+                    placeholder="22:30-23:00&#10;07:00-07:30&#10;19:00-19:30"
+                    style="width: 320px"
+                  />
+                  <span class="hint">每行一个；不能与默认时段重复，不填表示只能按默认时段</span>
+                </el-form-item>
                 <el-form-item label="每日次数上限">
                   <el-input-number v-model="form.garbage.daily_limit" :min="1" :max="10" style="width: 200px" />
                 </el-form-item>

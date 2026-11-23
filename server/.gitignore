@@ -7,3 +7,4 @@ bin/
 !.env.example
 configs/config.local.yaml
 .DS_Store
+__pycache__/

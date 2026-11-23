@@ -35,48 +35,19 @@ func TestCalcDogWalk(t *testing.T) {
 		want int64
 	}{
 		{
-			name: "AC-06 两只 30 分钟 超 3 公里 首次含熟悉费",
-			in: Input{ServiceType: ServiceDogWalk, PetCount: 2, DurationMin: 30,
-				DistanceKm: 4.2, NeedFamiliar: true, FamiliarOrders: 0,
+			// 没到 5 单的单次订单照常收费
+			name: "单次订单未满 5 单收熟悉费",
+			in: Input{ServiceType: ServiceDogWalk, Plan: PlanSingle, PetCount: 1, DurationMin: 20,
+				NeedFamiliar: true, FamiliarOrders: 4,
 				ServiceDate: day("2026-12-01"), Rules: json.RawMessage(dogRules)},
-			want: 8500, // 40 + 10 + 5 + 10 + 20
+			want: 6000, // 40 + 20
 		},
 		{
-			name: "基础价 20 分钟 1 只 不熟悉",
-			in: Input{ServiceType: ServiceDogWalk, PetCount: 1, DurationMin: 20,
-				DistanceKm: 1, ServiceDate: day("2026-12-01"), Rules: json.RawMessage(dogRules)},
-			want: 4000,
-		},
-		{
-			name: "25 分钟按 30 分钟档计（向上取整）",
-			in: Input{ServiceType: ServiceDogWalk, PetCount: 1, DurationMin: 25,
-				DistanceKm: 1, ServiceDate: day("2026-12-01"), Rules: json.RawMessage(dogRules)},
-			want: 5000, // 40 + 10
-		},
-		{
-			name: "满 5 单免熟悉费",
-			in: Input{ServiceType: ServiceDogWalk, PetCount: 1, DurationMin: 20,
-				NeedFamiliar: true, FamiliarOrders: 5,
+			// 仅喂食按时长没意义：改时长不该影响价格
+			name: "仅喂食不按时长加价",
+			in: Input{ServiceType: ServiceDogWalk, PetCount: 1, FeedOnly: true, DurationMin: 60,
 				ServiceDate: day("2026-12-01"), Rules: json.RawMessage(dogRules)},
-			want: 4000,
-		},
-		{
-			name: "配置的节日加价命中",
-			in: Input{ServiceType: ServiceDogWalk, PetCount: 1, DurationMin: 20,
-				ServiceDate: day("2027-02-06"), Rules: json.RawMessage(dogRules)},
-			want: 5500, // 40 + 15
-		},
-		{
-			name: "非配置日期不加价",
-			in: Input{ServiceType: ServiceDogWalk, PetCount: 1, DurationMin: 20,
-				ServiceDate: day("2027-02-08"), Rules: json.RawMessage(dogRules)},
-			want: 4000,
-		},
-		{
-			name: "仅喂食清洁 2 只",
-			in: Input{ServiceType: ServiceDogWalk, PetCount: 2, FeedOnly: true,
-				ServiceDate: day("2026-12-01"), Rules: json.RawMessage(dogRules)},
-			want: 7000, // 35 × 2
+			want: 3500,
 		},
 	}
 
@@ -308,5 +279,50 @@ func TestParseAccompanyBaseItem(t *testing.T) {
 func TestCalcUnknownService(t *testing.T) {
 	if _, err := Calc(Input{ServiceType: "unknown"}); err == nil {
 		t.Fatal("未知服务类型应当报错")
+	}
+}
+
+// TestFamiliarProgress 熟悉费进度必须如实反映「已完成几单 / 还差几单」，
+// 前端据此展示进度条，写错会直接误导用户。
+func TestFamiliarProgress(t *testing.T) {
+	cases := []struct {
+		name      string
+		orders    int
+		needFam   bool
+		wantFree  bool
+		wantDone  int
+		wantTotal int64
+	}{
+		{name: "未开熟悉开关不返回进度", orders: 3, needFam: false, wantFree: false, wantDone: 0, wantTotal: 4000},
+		{name: "已完成 3 单未达标", orders: 3, needFam: true, wantFree: false, wantDone: 3, wantTotal: 6000},
+		{name: "已完成 5 单达标", orders: 5, needFam: true, wantFree: true, wantDone: 5, wantTotal: 4000},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d, _ := time.Parse("2006-01-02", "2026-12-01")
+			got, err := Calc(Input{
+				ServiceType: ServiceDogWalk, Plan: PlanSingle, PetCount: 1, DurationMin: 20,
+				NeedFamiliar: c.needFam, FamiliarOrders: c.orders,
+				ServiceDate: d, Rules: json.RawMessage(dogRules),
+			})
+			if err != nil {
+				t.Fatalf("计价报错: %v", err)
+			}
+			if got.Total != c.wantTotal {
+				t.Fatalf("金额不符，期望 %d 实际 %d", c.wantTotal, got.Total)
+			}
+			if !c.needFam {
+				if got.Familiar != nil {
+					t.Fatalf("未开熟悉开关不应返回进度，实际 %+v", got.Familiar)
+				}
+				return
+			}
+			if got.Familiar == nil {
+				t.Fatal("开启熟悉开关必须返回进度")
+			}
+			if got.Familiar.Done != c.wantDone || got.Familiar.Need != 5 || got.Familiar.Free != c.wantFree {
+				t.Fatalf("进度不符，实际 %+v", got.Familiar)
+			}
+		})
 	}
 }

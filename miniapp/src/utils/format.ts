@@ -72,16 +72,19 @@ function pad(n: number): string {
   return n < 10 ? '0' + n : String(n)
 }
 
-/** 服务时刻表 */
+/** 服务时刻表：后台未配置当日库存时的兜底展示 */
 export const SLOTS = [
   { code: '08-10', label: '08:00-10:00' },
   { code: '12-14', label: '12:00-14:00' },
   { code: '18-20', label: '18:00-20:00' },
 ]
 
-/** 遛宠在工作日只开晚间，与后端种子数据保持一致 */
-export function availableSlots(dateStr: string): typeof SLOTS {
-  const d = new Date(dateStr.replace(/-/g, '/'))
-  const weekday = d.getDay() >= 1 && d.getDay() <= 5
-  return weekday ? SLOTS.filter((s) => s.code === '18-20') : SLOTS
+/**
+ * 时段代码转展示文案：'08-10' → '08:00-10:00'。
+ * 时段已改为后台可配置（可铺满全天），SLOTS 常量覆盖不了新代码，统一走这里；
+ * 不是 HH-HH 形态的（如包月默认取件 22:00-22:30）原样返回。
+ */
+export function slotTextOf(code: string): string {
+  const m = /^(\d{2})-(\d{2})$/.exec(code)
+  return m ? `${m[1]}:00-${m[2]}:00` : code
 }

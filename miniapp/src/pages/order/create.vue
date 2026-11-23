@@ -7,6 +7,8 @@ import {
   checkArea,
   createAddress,
   createOrder,
+  getGarbagePlan,
+  getQuotas,
   listCommunities,
   previewOrder,
   slotAvailability,
@@ -14,40 +16,113 @@ import {
   type AccompanyHospital,
   type AccompanyServiceItem,
   type CreateOrderPayload,
+  type GarbagePlan,
   type PreviewResp,
   type SlotAvailability,
 } from '@/api'
 import { useUserStore } from '@/store/user'
 import { ensureAuth } from '@/utils/auth'
-import { availableSlots, nextDays, price, SLOTS } from '@/utils/format'
-import { ApiError } from '@/utils/request'
+import { nextDays, price, SLOTS, slotTextOf } from '@/utils/format'
+import { ApiError, BASE_URL } from '@/utils/request'
 
 const user = useUserStore()
 
 const dates = nextDays(7)
 const durations = [20, 30, 40, 60]
+/** 进入方式：与服务端 order.entry_method 的枚举保持一致 */
+const ENTRY_METHODS = [
+  { value: 'knock', label: '敲门' },
+  { value: 'password', label: '门禁密码' },
+  { value: 'card', label: '门禁卡' },
+  { value: 'property', label: '物业代开' },
+  { value: 'other', label: '其他' },
+]
+
+/**
+ * 宠物预约（遛宠）只保留「门禁密码 / 门禁卡 / 其他」三个选项。
+ * 敲门、物业代开仍保留给陪诊等其它上门服务，只是不在遛宠下单页出现。
+ */
+const DOGWALK_ENTRY_METHODS = ['password', 'card', 'other']
+
 const garbageTypes = [
   { value: 'kitchen', label: '厨余垃圾' },
   { value: 'other', label: '其他垃圾' },
   { value: 'recyclable', label: '可回收物' },
 ]
 
+/**
+ * 遛宠「仅喂食清洁」「提前上门熟悉」两个开关暂时隐藏。
+ * 后端计价与订单字段保留，接口继续传 false；需要恢复时改回 true 即可。
+ */
+const SHOW_DOGWALK_SWITCHES = false
+
+/** 宠物只数选择暂时隐藏，固定按 1 只下单、按 1 只计价 */
+const SHOW_PET_COUNT = false
+
 const form = reactive({
   serviceType: 'garbage',
   serviceDate: dates[0].value,
   slotCode: '',
-  plan: 'single',
+  // 代倒垃圾自 2026-11 起只卖包月；单次仅限注册赠送的免费次数
+  plan: 'monthly',
+  extraSlotCode: '',
   garbageType: 'kitchen',
   petCount: 1,
   durationMin: 20,
   feedOnly: false,
   needFamiliar: false,
+  entryMethod: '' as string,
+  accessInfo: '',
   hospital: '', // 存 code，名称从后台选项映射
   serviceItems: [] as string[], // 已勾选的陪诊服务项 code
   remark: '',
 })
 
+/** 当前服务类型下可选的进入方式：宠物预约（遛宠）只留门禁密码/门禁卡/其他 */
+const entryMethods = computed(() =>
+  form.serviceType === 'dogwalk'
+    ? ENTRY_METHODS.filter((m) => DOGWALK_ENTRY_METHODS.includes(m.value))
+    : ENTRY_METHODS,
+)
+
+/** 切换服务类型后清掉不属于当前类型的已选项，避免提交界面上不存在的进入方式 */
+watch(
+  () => form.serviceType,
+  () => {
+    if (form.entryMethod && !entryMethods.value.some((m) => m.value === form.entryMethod)) {
+      form.entryMethod = ''
+      form.accessInfo = ''
+    }
+  },
+)
+
+/** 门禁密码/其他才需要补充文字说明，卡与物业代开不用 */
+const needsAccessText = computed(
+  () => form.entryMethod === 'password' || form.entryMethod === 'other',
+)
+
+/** 包月方案（价格/天数/默认时段/额外时段），数据来自后端 SKU 规则 */
+const garbagePlan = ref<GarbagePlan | null>(null)
+/** 剩余免费次数 */
+const garbageFree = ref(0)
+
 const preview = ref<PreviewResp | null>(null)
+/** 熟悉费累计进度：后端只在开启「提前上门熟悉」时返回 */
+const familiarProgress = computed(() => preview.value?.familiar_progress)
+/** 进度条宽度（%），达标后固定 100 */
+const familiarPercent = computed(() => {
+  const f = familiarProgress.value
+  if (!f || f.need <= 0) return 0
+  return Math.min(100, Math.round((f.done / f.need) * 100))
+})
+/** 进度文案：未拿到进度时退回静态规则说明（比如还没填地址时） */
+const familiarText = computed(() => {
+  const f = familiarProgress.value
+  if (!f) return '累计完成 5 单后免熟悉费'
+  if (f.free) return `已累计完成 ${f.done} 单，本次免熟悉费`
+  const left = Math.max(f.need - f.done, 0)
+  return `已累计完成 ${f.done} 单，再 ${left} 单免熟悉费`
+})
 const previewError = ref('')
 const submitting = ref(false)
 const showCalendar = ref(false)
@@ -66,6 +141,8 @@ const editingAddressId = ref(0) // 0 表示新增，非 0 表示编辑该地址
 const addressSaving = ref(false)
 const addressCheckMsg = ref<{ ok: boolean; text: string } | null>(null)
 const communities = ref<string[]>([])
+/** 小区选择弹层：showActionSheet 最多 6 项，后台小区已 12 个，必须自己列表 */
+const showCommunityPicker = ref(false)
 const addressForm = reactive({
   community: '',
   house_no: '',
@@ -87,10 +164,6 @@ const banner = computed(() => {
   return map[form.serviceType] || map.garbage
 })
 
-const slots = computed(() =>
-  form.serviceType === 'dogwalk' ? availableSlots(form.serviceDate) : SLOTS,
-)
-
 /**
  * 时段余量：满员时段置灰不可选。
  * 后端未配该日库存时返回空数组，此时视为全部可选（与后端下单兜底一致）。
@@ -108,6 +181,16 @@ async function loadSlotAvail() {
     slotAvail.value = {}
   }
 }
+
+/**
+ * 时段列表：直接取后台「时段库存」配置（铺满全天即可让用户任选任意时间段），
+ * 当日未配置时回落内置三段。与 CalendarPicker 的 daySlots 同一口径。
+ */
+const slots = computed(() => {
+  const codes = Object.keys(slotAvail.value).sort()
+  if (codes.length) return codes.map((code) => ({ code, label: slotTextOf(code) }))
+  return SLOTS
+})
 
 /** 某时段是否可约：无库存记录视为可约 */
 function slotUsable(code: string): boolean {
@@ -137,9 +220,19 @@ const addressContact = computed(() => {
   return [a.contact_name, a.contact_phone].filter(Boolean).join(' · ')
 })
 
+/** 当前是否走了包月流程（垃圾 + 包月） */
+const isGarbageMonthly = computed(
+  () => form.serviceType === 'garbage' && form.plan === 'monthly',
+)
+
 const timeText = computed(() => {
-  if (!form.slotCode) return ''
   const d = dates.find((x) => x.value === form.serviceDate)
+  if (isGarbageMonthly.value) {
+    // 包月不选时段：显示开始日 + 每日取件时间；选了备选时间则备选取代默认
+    const slot = form.extraSlotCode || garbagePlan.value?.default_slot || '22:00-22:30'
+    return d ? `${d.label} 开始 · 每天 ${slot} 取件` : ''
+  }
+  if (!form.slotCode) return d?.label || ''
   const s = slots.value.find((x) => x.code === form.slotCode)
   return [d?.label, s?.label].filter(Boolean).join(' ')
 })
@@ -156,10 +249,34 @@ onLoad(async (query) => {
     console.warn('[create] 初始化失败', e)
   }
   await loadAccompanyOptions()
-  await loadSlotAvail()
-  syncSlot()
+  if (form.serviceType === 'garbage') {
+    await loadGarbageInfo()
+  }
+  if (!isGarbageMonthly.value) {
+    await loadSlotAvail()
+    syncSlot()
+  }
   refreshPreview()
 })
+
+/**
+ * 加载代倒垃圾的包月方案与剩余免费次数。
+ * 价格、天数、时段全部来自后端配置，前端不写死，后台改价不用发版。
+ */
+async function loadGarbageInfo() {
+  try {
+    garbagePlan.value = await getGarbagePlan()
+  } catch (e) {
+    console.warn('[create] 包月方案加载失败', e)
+  }
+  try {
+    const list = await getQuotas()
+    garbageFree.value = list.find((q) => q.service_type === 'garbage')?.remaining || 0
+  } catch (e) {
+    console.warn('[create] 免费次数加载失败', e)
+  }
+  // 默认选包月；单次随时可买，有赠送次数时自动抵扣
+}
 
 /** 医院与陪诊服务项都从后台拉取，用户只能选、不能自由输入 */
 async function loadAccompanyOptions() {
@@ -188,6 +305,8 @@ function chooseHospital() {
     success: (r) => {
       form.hospital = hospitals.value[r.tapIndex].code
     },
+    // 微信对 itemList 有 6 项上限，超限会静默失败；至少给个提示，别让用户以为没点到
+    fail: () => uni.showToast({ title: '选项过多无法展开，请稍后重试', icon: 'none' }),
   })
 }
 
@@ -206,8 +325,10 @@ function syncSlot() {
 }
 
 watch(
-  () => [form.serviceDate, form.serviceType],
+  () => [form.serviceDate, form.serviceType, form.plan],
   async () => {
+    // 包月不选时段，也不查库存
+    if (isGarbageMonthly.value) return
     await loadSlotAvail()
     syncSlot()
   },
@@ -225,6 +346,7 @@ watch(
     form.feedOnly,
     form.needFamiliar,
     form.hospital,
+    form.extraSlotCode,
     form.serviceItems.join(','), // 数组内容变化也要触发试算
   ],
   () => {
@@ -245,9 +367,21 @@ function buildPayload(): CreateOrderPayload | null {
     remark: form.remark,
   }
 
+  // 进入方式只对需要进屋/上门的遛宠、陪诊有意义；
+  // 代倒垃圾在门口取袋，不进房间，不下发这两个字段。
+  if (form.serviceType !== 'garbage' && form.entryMethod) {
+    payload.entry_method = form.entryMethod
+    if (form.accessInfo.trim()) payload.access_info = form.accessInfo.trim()
+  }
+
   if (form.serviceType === 'garbage') {
     payload.plan = form.plan
     payload.garbage_type = form.garbageType
+    if (form.plan === 'monthly') {
+      // 包月不占库存也不选时段：默认取件时间由后端按规则落单
+      payload.slot_code = garbagePlan.value?.default_slot || '22:00-22:30'
+      if (form.extraSlotCode) payload.extra_slot_code = form.extraSlotCode
+    }
   } else if (form.serviceType === 'dogwalk') {
     payload.pet_count = form.petCount
     payload.duration_min = form.durationMin
@@ -345,19 +479,29 @@ function openAddressEdit(id?: number) {
   showAddressEdit.value = true
 }
 
-/** 小区只能从后台配置列表点选，避免自由输入不规范名称 */
-function chooseCommunity() {
+/**
+ * 小区只能从后台配置列表点选，避免自由输入不规范名称。
+ *
+ * 这里不能用 uni.showActionSheet：微信限制 itemList 最多 6 项，
+ * 后台已配置 12 个小区，超限会直接 fail 且没有任何提示，
+ * 表现就是「点了没反应」。改成自绘列表弹层，数量不受限也更好点。
+ */
+async function chooseCommunity() {
   if (!communities.value.length) {
-    uni.showToast({ title: '暂无可选小区', icon: 'none' })
+    // 首屏加载可能失败过（网络抖动），进弹层前补一次
+    await loadCommunities()
+  }
+  if (!communities.value.length) {
+    uni.showToast({ title: '小区列表加载失败，请重试', icon: 'none' })
     return
   }
-  uni.showActionSheet({
-    itemList: communities.value,
-    success: (r) => {
-      addressForm.community = communities.value[r.tapIndex]
-      onAddressCheck()
-    },
-  })
+  showCommunityPicker.value = true
+}
+
+function pickCommunity(name: string) {
+  addressForm.community = name
+  showCommunityPicker.value = false
+  onAddressCheck()
 }
 
 /** 输入门牌后即时校验范围，避免保存时才被后端拒绝 */
@@ -424,7 +568,8 @@ async function submit() {
     uni.showToast({ title: '请先添加地址', icon: 'none' })
     return
   }
-  if (!form.slotCode) {
+  // 包月不选时段，直接跳过这项校验
+  if (!isGarbageMonthly.value && !form.slotCode) {
     // 区分「没选」与「所选日期已全部约满」，后者要让用户换日期而不是重选时段
     const allFull = slots.value.length > 0 && !slots.value.some((s) => slotUsable(s.code))
     uni.showToast({
@@ -452,7 +597,13 @@ async function submit() {
   submitting.value = true
   try {
     const res = await createOrder(payload)
-    await startPay(res.order.order_no)
+    // 试运行期后端会跳过支付、直接进入待接单，此时不需要也不应该调起支付。
+    // 保留 pending_payment 分支：微信支付接入后这段代码不用改。
+    if (res.order.status === 'pending_payment') {
+      await startPay(res.order.order_no)
+    } else {
+      uni.showToast({ title: '下单成功', icon: 'success' })
+    }
     // 用 navigateTo 保留页面栈，详情页原生导航栏才会显示返回箭头；
     // redirectTo 会销毁预约页，栈里只剩详情页，左上角返回按钮消失。
     uni.navigateTo({ url: `/pages/order/detail?orderNo=${res.order.order_no}` })
@@ -484,7 +635,8 @@ async function startPay(orderNo: string) {
   // #ifndef MP-WEIXIN
   await new Promise<void>((resolve, reject) => {
     uni.request({
-      url: `${import.meta.env.VITE_API_BASE || ''}/api/v1/dev/orders/${orderNo}/mock-pay`,
+      // 用统一的 BASE_URL，避免和 request.ts 的回落逻辑不一致
+      url: `${BASE_URL}/api/v1/dev/orders/${orderNo}/mock-pay`,
       method: 'POST',
       header: { 'X-User-Id': user.userId },
       success: () => resolve(),
@@ -502,7 +654,8 @@ async function startPay(orderNo: string) {
       <view class="banner-copy">
         <view class="banner-title">{{ banner.title }}</view>
         <view class="banner-sub">
-          {{ user.currentAddress?.community || '示例小区' }} · 单次服务
+          {{ user.currentAddress?.community || '示例小区' }} ·
+          {{ isGarbageMonthly ? '包月服务' : '单次服务' }}
         </view>
       </view>
       <view class="banner-art">{{ banner.art }}</view>
@@ -534,17 +687,57 @@ async function startPay(orderNo: string) {
       </view>
     </view>
 
-    <!-- 服务方案（仅垃圾） -->
+    <!-- 服务方案（仅垃圾）：包月为主，单次只能用注册赠送的免费次数 -->
     <view v-if="form.serviceType === 'garbage'" class="card">
       <view class="f-label">服务方案</view>
-      <view class="pills">
-        <view class="pill" :class="{ active: form.plan === 'single' }" @tap="form.plan = 'single'">
-          单次
+
+      <view class="plan-card" :class="{ active: form.plan === 'monthly' }" @tap="form.plan = 'monthly'">
+        <view class="plan-main">
+          <view class="plan-name">包月代倒垃圾</view>
+          <view class="plan-sub">每天 {{ garbagePlan?.default_slot || '22:00-22:30' }} 上门取件</view>
         </view>
-        <view class="pill" :class="{ active: form.plan === 'monthly' }" @tap="form.plan = 'monthly'">
-          包月
+        <view class="plan-price">
+          {{ garbagePlan ? price(garbagePlan.price) : '¥30' }}
+          <text class="plan-unit">/{{ garbagePlan?.days || 30 }} 天</text>
         </view>
       </view>
+
+      <view class="plan-card" :class="{ active: form.plan === 'single' }" @tap="form.plan = 'single'">
+        <view class="plan-main">
+          <view class="plan-name">按次倒垃圾</view>
+          <view class="plan-sub">
+            <template v-if="garbageFree > 0">赠送次数抵扣，剩余 {{ garbageFree }} 次</template>
+            <template v-else>上门取件一次，需选择时段</template>
+          </view>
+        </view>
+        <view v-if="garbageFree > 0" class="plan-price free">免费</view>
+        <view v-else class="plan-price">
+          {{ garbagePlan ? price(garbagePlan.single_price) : '¥5.00' }}
+          <text class="plan-unit">/次</text>
+        </view>
+      </view>
+
+      <!-- 备选时段：选中后取代默认时段，每天改按备选时间上门取件 -->
+      <template v-if="form.plan === 'monthly' && garbagePlan && garbagePlan.extra_slots.length">
+        <view class="divider" />
+        <view class="f-label">
+          备选服务时间<text class="f-label-sub">（可选，替换默认取件时间）</text>
+        </view>
+        <view class="pills">
+          <view class="pill soft" :class="{ active: !form.extraSlotCode }" @tap="form.extraSlotCode = ''">
+            不需要
+          </view>
+          <view
+            v-for="s in garbagePlan.extra_slots"
+            :key="s"
+            class="pill soft"
+            :class="{ active: form.extraSlotCode === s }"
+            @tap="form.extraSlotCode = s"
+          >
+            {{ s }}
+          </view>
+        </view>
+      </template>
     </view>
 
     <!-- 垃圾类型 -->
@@ -566,7 +759,8 @@ async function startPay(orderNo: string) {
 
     <!-- 遛宠参数 -->
     <view v-if="form.serviceType === 'dogwalk'" class="card">
-      <view class="f-row">
+      <!-- 宠物只数暂时隐藏，固定 1 只 -->
+      <view v-if="SHOW_PET_COUNT" class="f-row">
         <view class="f-label">宠物只数</view>
         <view class="stepper">
           <view class="step-btn" @tap="form.petCount = Math.max(1, form.petCount - 1)">−</view>
@@ -574,34 +768,50 @@ async function startPay(orderNo: string) {
           <view class="step-btn" @tap="form.petCount = Math.min(5, form.petCount + 1)">＋</view>
         </view>
       </view>
-      <view class="divider" />
-      <view class="f-label">服务时长</view>
-      <view class="pills">
-        <view
-          v-for="d in durations"
-          :key="d"
-          class="pill soft"
-          :class="{ active: form.durationMin === d }"
-          @tap="form.durationMin = d"
-        >
-          {{ d }} 分钟
+      <!-- 仅喂食按次计价，时长没有意义，直接收起避免「选了没反应」 -->
+      <template v-if="!form.feedOnly">
+        <!-- 只数隐藏后「服务时长」是卡片首行，不再需要顶部分隔线 -->
+        <view v-if="SHOW_PET_COUNT" class="divider" />
+        <view class="f-label">服务时长</view>
+        <view class="pills">
+          <view
+            v-for="d in durations"
+            :key="d"
+            class="pill soft"
+            :class="{ active: form.durationMin === d }"
+            @tap="form.durationMin = d"
+          >
+            {{ d }} 分钟
+          </view>
         </view>
-      </view>
-      <view class="divider" />
-      <view class="f-row">
-        <view class="f-label">仅喂食清洁（不遛）</view>
-        <switch class="sw" :checked="form.feedOnly" color="#0f7f78" @change="form.feedOnly = !form.feedOnly" />
-      </view>
-      <view class="f-row">
-        <view class="f-label">需要提前上门熟悉</view>
-        <switch
-          class="sw"
-          :checked="form.needFamiliar"
-          color="#0f7f78"
-          @change="form.needFamiliar = !form.needFamiliar"
-        />
-      </view>
-      <view class="f-hint">累计完成 5 单后免熟悉费</view>
+      </template>
+      <!-- 宠物情况并到页面底部的「备注」，不在遛宠卡片里单独留一个备注框 -->
+      <!-- 仅喂食 / 提前熟悉两个开关暂时隐藏，后端能力保留 -->
+      <template v-if="SHOW_DOGWALK_SWITCHES">
+        <view class="divider" />
+        <view class="f-row">
+          <view class="f-label">仅喂食清洁（不遛）</view>
+          <switch class="sw" :checked="form.feedOnly" color="#0f7f78" @change="form.feedOnly = !form.feedOnly" />
+        </view>
+        <view v-if="form.feedOnly" class="f-hint">
+          按只数计价，不按时长计费；提前熟悉、超距离与节日加价照常计算
+        </view>
+        <view class="f-row">
+          <view class="f-label">需要提前上门熟悉</view>
+          <switch
+            class="sw"
+            :checked="form.needFamiliar"
+            color="#0f7f78"
+            @change="form.needFamiliar = !form.needFamiliar"
+          />
+        </view>
+        <view class="familiar-box">
+          <view v-if="familiarProgress" class="fp-bar">
+            <view class="fp-fill" :class="{ done: familiarProgress.free }" :style="{ width: familiarPercent + '%' }" />
+          </view>
+          <text class="f-hint">{{ familiarText }}</text>
+        </view>
+      </template>
     </view>
 
     <!-- 陪诊信息：就诊人取服务地址联系人；医院只能从后台选项选，右对齐展示 -->
@@ -642,14 +852,52 @@ async function startPay(orderNo: string) {
       <view class="f-hint">按所选项目计价，医院与服务项均由社区统一配置</view>
     </view>
 
-    <!-- 备注 -->
-    <view class="card">
-      <view class="f-label">备注</view>
+    <!-- 进入方式（选填）：门禁信息加密存储，服务方只在服务前后窗口内可见。
+         代倒垃圾只到门口取袋，不进房间，所以这类订单不问进入方式。 -->
+    <view v-if="form.serviceType !== 'garbage'" class="card">
+      <view class="f-label">进入方式（选填）</view>
+      <view class="pills">
+        <view
+          v-for="m in entryMethods"
+          :key="m.value"
+          class="pill soft"
+          :class="{ active: form.entryMethod === m.value }"
+          @tap="form.entryMethod = form.entryMethod === m.value ? '' : m.value"
+        >
+          {{ m.label }}
+        </view>
+      </view>
       <input
+        v-if="needsAccessText"
+        v-model="form.accessInfo"
+        class="remark-input"
+        maxlength="100"
+        :placeholder="form.entryMethod === 'password' ? '门禁密码，例如 8888#' : '钥匙在哪、怎么进门'"
+      />
+      <view class="f-hint">
+        加密保存，服务方仅在服务开始前 2 小时至服务结束后可见
+      </view>
+    </view>
+
+    <!-- 备注：遛宠的宠物情况也写在这里，全页只留一个备注入口；门禁信息归「进入方式」卡片 -->
+    <view class="card">
+      <view class="f-label">
+        备注
+        <text v-if="form.serviceType === 'dogwalk'" class="f-label-sub">（选填：宠物类型、名字、情况或其他要求）</text>
+      </view>
+      <textarea
+        v-if="form.serviceType === 'dogwalk'"
+        v-model="form.remark"
+        class="f-textarea"
+        placeholder="如：金毛，叫豆豆，怕打雷；请提前联系"
+        maxlength="200"
+      />
+      <input
+        v-else
         v-model="form.remark"
         class="remark-input"
         maxlength="200"
-        placeholder="例如：请提前联系 / 门禁密码"
+        placeholder="例如：请提前联系"
       />
     </view>
 
@@ -755,11 +1003,33 @@ async function startPay(orderNo: string) {
       </view>
     </view>
 
+    <view v-if="showCommunityPicker" class="mask mask-top" @tap="showCommunityPicker = false">
+      <view class="sheet" @tap.stop>
+        <view class="sheet-title">选择小区</view>
+        <scroll-view scroll-y class="comm-list">
+          <view
+            v-for="c in communities"
+            :key="c"
+            class="comm-item"
+            :class="{ active: c === addressForm.community }"
+            @tap="pickCommunity(c)"
+          >
+            <text class="comm-name">{{ c }}</text>
+            <text v-if="c === addressForm.community" class="comm-check">✓</text>
+          </view>
+        </scroll-view>
+        <view class="sheet-actions">
+          <view class="btn-ghost full" @tap="showCommunityPicker = false">关闭</view>
+        </view>
+      </view>
+    </view>
+
     <CalendarPicker
       v-model:visible="showCalendar"
       :date="form.serviceDate"
       :slot="form.slotCode"
       :service-type="form.serviceType"
+      :date-only="isGarbageMonthly"
       @confirm="onConfirmTime"
     />
   </view>
@@ -1017,6 +1287,29 @@ async function startPay(orderNo: string) {
   line-height: 1.6;
 }
 
+/* 熟悉费累计进度：让「再几单免费」可见，而不是只给一句静态规则 */
+.familiar-box {
+  margin-top: 12rpx;
+}
+
+.fp-bar {
+  height: 8rpx;
+  border-radius: 999rpx;
+  background: var(--brand-light);
+  overflow: hidden;
+}
+
+.fp-fill {
+  height: 100%;
+  border-radius: 999rpx;
+  background: var(--mint-1);
+  transition: width 0.25s ease;
+}
+
+.fp-fill.done {
+  background: var(--brand);
+}
+
 .divider {
   height: 1rpx;
   background: #f2f4f3;
@@ -1068,6 +1361,77 @@ async function startPay(orderNo: string) {
   border-color: var(--brand);
   color: #fff;
   font-weight: 500;
+}
+
+.f-textarea {
+  width: 100%;
+  min-height: 120rpx;
+  padding: 20rpx 24rpx;
+  box-sizing: border-box;
+  font-size: 27rpx;
+  color: var(--text);
+  background: var(--bg);
+  border-radius: 16rpx;
+}
+
+/* 方案卡：包月为主推，选中态用主色描边 */
+.plan-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  padding: 24rpx;
+  margin-bottom: 16rpx;
+  border: 2rpx solid var(--border);
+  border-radius: 16rpx;
+  background: #fff;
+}
+
+.plan-card.active {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+}
+
+.plan-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.plan-name {
+  font-size: 29rpx;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.plan-sub {
+  margin-top: 8rpx;
+  font-size: 23rpx;
+  color: var(--text-sub);
+  line-height: 1.5;
+}
+
+.plan-price {
+  font-size: 32rpx;
+  font-weight: 800;
+  color: var(--brand-dark);
+  white-space: nowrap;
+}
+
+.plan-price.free {
+  font-size: 28rpx;
+  color: var(--accent);
+}
+
+.plan-unit {
+  font-size: 22rpx;
+  font-weight: 500;
+  color: var(--text-light);
+}
+
+.plan-tip {
+  margin-top: 8rpx;
+  font-size: 23rpx;
+  color: var(--text-light);
 }
 
 /* 垃圾类型用浅底选中，与设计稿一致 */
@@ -1230,6 +1594,41 @@ async function startPay(orderNo: string) {
 .picker-list {
   max-height: 60vh;
   overflow-y: auto;
+}
+
+/* 小区选择弹层要盖在地址编辑弹层之上 */
+.mask-top {
+  z-index: 220;
+}
+
+.comm-list {
+  max-height: 56vh;
+  height: 56vh;
+}
+
+.comm-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 26rpx 20rpx;
+  border-bottom: 1rpx solid #f3f4f6;
+  font-size: 28rpx;
+  color: var(--text);
+}
+
+.comm-item.active {
+  color: var(--brand);
+  background: var(--brand-tint);
+  font-weight: 600;
+}
+
+.comm-check {
+  color: var(--brand);
+  font-size: 26rpx;
+}
+
+.btn-ghost.full {
+  flex: 1;
 }
 
 .picker-item {

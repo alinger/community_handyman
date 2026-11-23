@@ -51,6 +51,54 @@ func RequireUser(secret string, allowHeaderFallback bool) gin.HandlerFunc {
 	}
 }
 
+// RequireUserOrMediaTicket 用于服务记录的照片、视频等「文件直链」。
+//
+// 这类资源由 <image>、<video>、uni.previewImage 等原生组件加载，
+// 请求由客户端渲染层发起，无法注入 Authorization 头；生产环境又不接受
+// X-User-Id 兜底，所以只按 header 鉴权时这些资源必然 401。
+// 这里额外接受 URL 上的短期票据 ?t=：票据只读、绑定用户与具体路径、30 分钟过期。
+func RequireUserOrMediaTicket(secret string, allowHeaderFallback bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if raw, err := auth.Bearer(c.GetHeader("Authorization")); err == nil && raw != "" {
+			claims, err := auth.Parse(secret, raw)
+			if err != nil || (claims.Role != auth.RoleUser && claims.Role != auth.RoleProvider) {
+				abortUnauthorized(c)
+				return
+			}
+			c.Set(CtxUserID, claims.Sub)
+			c.Set(CtxUserRole, claims.Role)
+			c.Next()
+			return
+		}
+
+		if allowHeaderFallback {
+			if uid, err := strconv.ParseUint(c.GetHeader("X-User-Id"), 10, 64); err == nil && uid > 0 {
+				c.Set(CtxUserID, uid)
+				c.Next()
+				return
+			}
+		}
+
+		ticket := c.Query("t")
+		if ticket == "" {
+			abortUnauthorized(c)
+			return
+		}
+		tk, err := auth.ParseMediaTicket(secret, ticket)
+		if err != nil {
+			abortUnauthorized(c)
+			return
+		}
+		// 票据绑定路径：拿同一张票去读别的 recordID 必须失败
+		if tk.Path != c.Request.URL.Path {
+			abortUnauthorized(c)
+			return
+		}
+		c.Set(CtxUserID, tk.UID)
+		c.Next()
+	}
+}
+
 // CtxUserRole 是用户端鉴权写入 context 的角色键。
 const CtxUserRole = "user_role"
 

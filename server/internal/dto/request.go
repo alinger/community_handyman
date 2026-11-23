@@ -111,6 +111,8 @@ type DevLoginReq struct {
 type UpdateMeReq struct {
 	Nickname string `json:"nickname" binding:"required,max=32" example:"张阿姨"`
 	Phone    string `json:"phone" binding:"omitempty,max=20" example:"13800138000"`
+	// Avatar 为头像地址（由头像上传接口返回）。留空表示不改动头像。
+	Avatar string `json:"avatar" binding:"omitempty,max=512" example:"/api/v1/users/12/avatar/1732000000.png"`
 }
 
 // MeResp 当前用户信息。
@@ -119,6 +121,7 @@ type MeResp struct {
 	Nickname string `json:"nickname"`
 	Phone    string `json:"phone"`
 	Role     string `json:"role"`
+	Avatar   string `json:"avatar"`
 }
 
 // RegisterReq 用户端手机号注册。
@@ -139,4 +142,51 @@ type UserLoginReq struct {
 type ChangePasswordReq struct {
 	OldPassword string `json:"old_password" binding:"required,max=32"`
 	NewPassword string `json:"new_password" binding:"required,max=32"`
+}
+
+// SendSmsCodeReq 发送短信验证码。scene 为空时按 login 处理。
+type SendSmsCodeReq struct {
+	Phone string `json:"phone" binding:"required,max=20" example:"13800138000"`
+	Scene string `json:"scene" binding:"omitempty,oneof=login reset" example:"login"`
+}
+
+// SmsLoginReq 验证码登录，手机号未注册时自动建号。
+type SmsLoginReq struct {
+	Phone    string `json:"phone" binding:"required,max=20" example:"13800138000"`
+	Code     string `json:"code" binding:"required,len=6" example:"123456"`
+	Nickname string `json:"nickname" binding:"max=32" example:"张阿姨"`
+}
+
+// WechatLoginReq 微信授权登录。code 为 wx.login 返回的临时凭证。
+type WechatLoginReq struct {
+	Code     string `json:"code" binding:"required,max=128" example:"0a1B2c3D"`
+	Nickname string `json:"nickname" binding:"max=64" example:"张阿姨"`
+	Avatar   string `json:"avatar" binding:"max=512"`
+}
+
+// BindPhoneReq 给已登录账号绑定手机号。
+type BindPhoneReq struct {
+	Phone string `json:"phone" binding:"required,max=20" example:"13800138000"`
+	Code  string `json:"code" binding:"omitempty,len=6" example:"123456"`
+}
+
+// WechatPhoneReq 用「手机号快速验证组件」的 code 绑定手机号。
+// code 来自 button open-type="getPhoneNumber" 的回调，5 分钟内有效且只能消费一次。
+type WechatPhoneReq struct {
+	Code string `json:"code" binding:"required,max=128" example:"0a1B2c3D"`
+}
+
+// SmsResetPasswordReq 凭短信验证码重置密码。
+type SmsResetPasswordReq struct {
+	Phone       string `json:"phone" binding:"required,max=20" example:"13800138000"`
+	Code        string `json:"code" binding:"required,len=6" example:"123456"`
+	NewPassword string `json:"new_password" binding:"required,max=32" example:"123456"`
+}
+
+// QuotaResp 免费次数余额。remaining 是前端真正要用的字段，另两个便于排查发放与消耗。
+type QuotaResp struct {
+	ServiceType string `json:"service_type" example:"garbage"`
+	Total       int    `json:"total" example:"2"`
+	Used        int    `json:"used" example:"1"`
+	Remaining   int    `json:"remaining" example:"1"`
 }

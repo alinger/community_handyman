@@ -1,4 +1,4 @@
-# 小区好帮手 · 社区生活服务预约平台
+# 邻有回应 · 社区生活服务预约平台
 
 面向社区的上门与陪同服务预约平台：代倒垃圾、遛宠、陪诊。住户在小程序下单并支付，服务方接单履约，运营在后台管价格与退款。
 
@@ -70,7 +70,15 @@ npm run dev:mp-weixin   # 产出 dist/dev/mp-weixin，用微信开发者工具�
 npm run build:mp-weixin # 生产构建
 ```
 
-开发期不接微信登录，启动时用固定 openid 调 `/api/v1/dev/login` 自动建号；支付走沙箱 `mock-pay` 接口。接入商户号后替换 `src/store/user.ts` 的 `ensureLogin` 与 `startPay` 即可，页面不用改。
+开发期不接微信登录，启动时用固定 openid 调 `/api/v1/dev/login` 自动建号。
+
+用户端接口地址由 `miniapp/.env.*` 决定：`npm run dev:mp-weixin` 连本机 8080，`npm run build:mp-weixin` 连 `https://m.yubangbzz.com`；需要 dev 模式产物用 `npm run build:mp-weixin:dev`（`uni build` 默认是生产模式，别搞混）。
+
+**支付当前默认跳过**：`configs/config.*.yaml` 的 `payment.skip_pay: true` 让下单直接按支付成功推进到「待接单」，不再弹支付。商户号与证书齐备后：
+
+1. 把 `payment.provider` 改为 `wechat`、`skip_pay` 改为 `false`；
+2. 前端 `pages/order/create.vue` 的 `startPay` 换成 `uni.requestPayment`（判断条件已按 `order.status === 'pending_payment'` 写好，无需改流程）；
+3. 沙箱 `mock-pay` 接口仍保留，只用于 e2e 回归（`run_e2e.sh` 固定 `PAYMENT_SKIP_PAY=false`）。
 
 ### 运营后台
 
@@ -91,15 +99,15 @@ npm run build     # 类型检查 + 生产构建到 dist/
 |---|---|
 | 后端 | Go 1.25 + Gin + GORM + golang-migrate |
 | 数据库 | MySQL 8（utf8mb4） |
-| 支付 | 微信支付 v3（当前为沙箱实现，商户号下来后切换） |
+| 支付 | 微信支付 v3（当前：`skip_pay` 跳过支付 + 沙箱渠道，商户号下来后切换） |
 | 存储 | 本地目录（可切换对象存储） |
-| 部署 | pm2 托管二进制 |
+| 部署 | systemd 托管二进制，`make build-linux` 交叉编译（详见 [docs/deploy.md](docs/deploy.md)） |
 
 ## 文档
 
-- 需求文档 V1.1 —— `docs/小区好帮手-社区生活服务预约平台需求文档.docx`
-- 开发计划 —— `docs/小区好帮手-开发计划.docx`
-- 项目骨架说明 —— `docs/小区好帮手-Go项目骨架说明.docx`
+- 需求文档 V1.1 —— `docs/邻有回应-社区生活服务预约平台需求文档.docx`
+- 开发计划 —— `docs/邻有回应-开发计划.docx`
+- 项目骨架说明 —— `docs/邻有回应-Go项目骨架说明.docx`
 - 服务端开发说明 —— `server/README.md`
 
 ## 当前进度

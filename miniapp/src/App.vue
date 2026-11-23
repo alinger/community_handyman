@@ -2,8 +2,18 @@
 import { onLaunch } from '@dcloudio/uni-app'
 import { useUserStore } from '@/store/user'
 
-/** 免登录页面：登录/注册页与静态文档页，未登录也要能直接打开 */
-const PUBLIC_PAGES = ['pages/auth/login', 'pages/auth/register', 'pages/doc/index']
+/** 免登录页面：登录/注册页、静态文档页，以及不涉及个人信息的公开信息页 */
+const PUBLIC_PAGES = [
+  'pages/auth/login',
+  'pages/auth/register',
+  'pages/auth/forgot',
+  'pages/doc/index',
+  // 服务范围是后台配置的公开信息，访客从分享/菜单进入不该被弹回登录页
+  'pages/scope/index',
+]
+
+/** 访客可直接浏览的页面：未登录启停时不要把它们踢回登录页 */
+const GUEST_PAGES = ['pages/index/index', 'pages/mine/index', 'pages/doc/index']
 
 /** 服务方侧页面：已经停在这些页时不要再 reLaunch，否则刷新会打断用户 */
 const isProviderPage = (path: string) => path.startsWith('pages/provider/')
@@ -38,12 +48,23 @@ onLaunch(async () => {
   try {
     await user.ensureLogin()
     await user.loadAddresses()
-  } catch (e) {
-    // 打开的是公开页就不打断用户；否则回登录页
-    if (!isPublic) {
-      uni.reLaunch({ url: '/pages/auth/login' })
-    }
+    return
+  } catch {
+    // 未登录，走下面的访客/登录分流
   }
+
+  // 打开的是公开页：一律不打断。
+  if (isPublic) return
+
+  // 访客页（首页/我的/文档）只对「主动选了先逛逛」的用户放行。
+  //
+  // 首页现在是小程序入口页（pages 数组第一项），冷启动 launchPath 必然是它；
+  // 若这里无条件放行，未登录用户会先看到首页、再被页面的 ensureAuth 弹回登录页，
+  // 视觉上闪一下。所以在 onLaunch 阶段就把「没登录且没选访客」的人送去登录页。
+  const isGuestPage = GUEST_PAGES.some((p) => launchPath.startsWith(p))
+  if (isGuestPage && user.isGuest) return
+
+  uni.reLaunch({ url: '/pages/auth/login' })
 })
 </script>
 

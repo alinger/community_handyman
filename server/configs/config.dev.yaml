@@ -27,6 +27,8 @@ redis:
 
 wechat:
   app_id: "${WECHAT_APP_ID}"
+  # 小程序 AppSecret，用于 wx.login 换 openid；与支付用的 APIv3 密钥无关
+  app_secret: "${WECHAT_APP_SECRET}"
   mch_id: "${WECHAT_MCH_ID}"
   serial_no: "${WECHAT_SERIAL_NO}"
   api_v3_key: "${WECHAT_API_V3_KEY}"
@@ -38,10 +40,18 @@ auth:
   secret: "${AUTH_SECRET}"
   token_ttl: 12h
 
+security:
+  # 门禁密码等敏感字段的加密口令。留空时退回用 AUTH_SECRET 派生，
+  # 但生产环境建议显式配置：换 AUTH_SECRET 会让历史密文全部解不开。
+  access_key: "${SECURITY_ACCESS_KEY}"
+
 payment:
   # sandbox 本地联调；商户号与证书齐备后改为 wechat
   provider: "sandbox"
   sandbox_secret: "${PAYMENT_SANDBOX_SECRET}"
+  # 试运行期：下单即视为已支付，不调起支付。
+  # 微信支付商户号与证书齐备后改为 false，并同时把 provider 换成 wechat。
+  skip_pay: true
 
 storage:
   # local 落本地目录，oss/cos/s3 接入云存储后切换
@@ -52,3 +62,13 @@ storage:
   bucket: "${STORAGE_BUCKET}"
   access_key: "${STORAGE_ACCESS_KEY}"
   secret_key: "${STORAGE_SECRET_KEY}"
+
+sms:
+  # aliyun 走阿里云短信真实下发；留空在 dev 环境自动回落到 console（验证码打到日志）
+  provider: "${SMS_PROVIDER}"
+  access_key_id: "${SMS_ACCESS_KEY_ID}"
+  access_key_secret: "${SMS_ACCESS_KEY_SECRET}"
+  sign_name: "${SMS_SIGN_NAME}"
+  template_code: "${SMS_TEMPLATE_CODE}"
+  # 专有云/海外区域可覆盖，留空用官方 https://dysmsapi.aliyuncs.com/
+  endpoint: "${SMS_ENDPOINT}"

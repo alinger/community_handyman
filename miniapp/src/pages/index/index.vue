@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { APP_VERSION } from '@/utils/version'
 import { computed, onMounted, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import TabBar from '@/components/TabBar.vue'
 import { useUserStore } from '@/store/user'
-import { ensureAuth } from '@/utils/auth'
+import { ensureAuth, requireLogin } from '@/utils/auth'
 import { SLOTS } from '@/utils/format'
 
 const user = useUserStore()
@@ -65,6 +66,8 @@ onMounted(() => {
 
 onShow(async () => {
   if (!ensureAuth()) return
+  // 访客态：不拉地址（需要登录态），页面按无地址渲染
+  if (user.isGuest) return
   try {
     await user.ensureLogin()
     // 只有「服务方视角」才跳工作台；已认证但处于住户视角时正常展示首页，
@@ -80,7 +83,13 @@ onShow(async () => {
 })
 
 function goCreate(type: string) {
+  // 访客/未登录：先问要不要登录，避免直接跳走打断浏览
+  if (!requireLogin()) return
   uni.navigateTo({ url: `/pages/order/create?type=${type}` })
+}
+
+function goLogin() {
+  uni.navigateTo({ url: '/pages/auth/login' })
 }
 
 function goMine() {
@@ -109,6 +118,7 @@ function fromMenu(fn: () => void) {
 const menuItems = [
   { icon: '📋', label: '我的订单', go: () => uni.reLaunch({ url: '/pages/order/list' }) },
   { icon: '📍', label: '常用地址', go: () => uni.navigateTo({ url: '/pages/address/index' }) },
+  { icon: '🗺️', label: '服务范围', go: () => uni.navigateTo({ url: '/pages/scope/index' }) },
   { icon: '⚙️', label: '设置', go: () => uni.navigateTo({ url: '/pages/settings/index' }) },
   { icon: '📄', label: '服务条款', go: () => uni.navigateTo({ url: '/pages/doc/index?type=terms' }) },
   { icon: '🔒', label: '隐私政策', go: () => uni.navigateTo({ url: '/pages/doc/index?type=privacy' }) },
@@ -124,13 +134,20 @@ const menuItems = [
         <view class="nav-btn" @tap="openMenu">
           <view class="burger"><view /><view /><view /></view>
         </view>
-        <text class="nav-title">小区好帮手</text>
+        <text class="nav-title">邻有回应</text>
+        <text v-if="user.isGuest" class="guest-tag">访客</text>
         <view class="nav-btn" @tap="goMine">
           <view class="avatar">
             <text class="avatar-char">{{ (user.nickname || '住')[0] }}</text>
           </view>
         </view>
       </view>
+    </view>
+
+    <!-- 访客横幅：明确告知当前是浏览模式，并给一个显眼登录入口 -->
+    <view v-if="user.isGuest" class="guest-banner" @tap="goLogin">
+      <text class="guest-banner-text">当前为访客模式，登录后可预约服务、查看订单</text>
+      <text class="guest-banner-btn">去登录 ›</text>
     </view>
 
     <!-- 头部：问候 + 主标题（定位行已按要求隐藏） -->
@@ -262,7 +279,7 @@ const menuItems = [
             <text class="chev">›</text>
           </view>
         </view>
-        <view class="drawer-foot">小区好帮手 · v1.0.0</view>
+        <view class="drawer-foot">邻有回应 · v{{ APP_VERSION }}</view>
       </view>
     </view>
   </view>
@@ -295,6 +312,40 @@ const menuItems = [
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.guest-tag {
+  margin-left: 12rpx;
+  padding: 2rpx 12rpx;
+  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.28);
+  font-size: 20rpx;
+  font-weight: 400;
+}
+
+.guest-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin: 0 28rpx 8rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 16rpx;
+  background: #fef5e6;
+}
+
+.guest-banner-text {
+  flex: 1;
+  font-size: 23rpx;
+  color: #a9762a;
+  line-height: 1.5;
+}
+
+.guest-banner-btn {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #a9762a;
 }
 
 .nav-title {

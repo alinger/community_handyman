@@ -102,10 +102,10 @@ func (a *API) AdminRedeem(c *gin.Context) {
 // @Security     UserID
 // @Router       /api/v1/orders/{orderNo}/monthly [get]
 func (a *API) MonthlyDetail(c *gin.Context) {
-	sum, err := a.Monthly.Detail(c.Request.Context(), c.Param("orderNo"))
-	if err != nil {
+	if sum, err := a.Monthly.Detail(c.Request.Context(),
+		middleware.CurrentUserID(c), c.Param("orderNo")); err != nil {
 		response.Fail(c, err)
-		return
+	} else {
+		response.OK(c, sum)
 	}
-	response.OK(c, sum)
 }

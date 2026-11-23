@@ -5,7 +5,8 @@ import TabBar from '@/components/TabBar.vue'
 import { listOrders, type Order } from '@/api'
 import { useUserStore } from '@/store/user'
 import { ensureAuth } from '@/utils/auth'
-import { friendlyDate, price, SERVICE_LABEL, SLOTS } from '@/utils/format'
+import { friendlyDate, price, SERVICE_LABEL, slotTextOf } from '@/utils/format'
+import { contactProvider } from '@/utils/provider-contact'
 
 const user = useUserStore()
 
@@ -72,7 +73,7 @@ function goDetail(orderNo: string) {
 }
 
 function slotLabel(code: string): string {
-  return SLOTS.find((s) => s.code === code)?.label || code
+  return slotTextOf(code)
 }
 
 /** 卡片副标题：小区 + 单次/包月 */
@@ -82,10 +83,15 @@ function subLine(o: Order): string {
   return [area, plan].filter(Boolean).join(' · ')
 }
 
-/** 时间文案：今天/明天优先，其他显示日期 */
+/** 时间文案：今天/明天优先，其他显示日期；包月选了备选时间则显示备选 */
 function timeLine(o: Order): string {
   const d = friendlyDate(o.service_date)
-  return `${d} ${slotLabel(o.slot_code)}`
+  const base = `${d} ${slotLabel(o.extra_slot_code || o.slot_code)}`
+  // 拒单自动退款后，列表里就能看到钱去哪了，不用点进详情查
+  if (o.status === 'rejected' && (o.refunded_amount || 0) > 0) {
+    return `${base} · 已退 ¥${((o.refunded_amount || 0) / 100).toFixed(2)}`
+  }
+  return base
 }
 
 function statusClass(status: string): string {
@@ -94,6 +100,13 @@ function statusClass(status: string): string {
   if (status === 'completed') return 'done'
   if (status === 'canceled' || status === 'rejected') return 'closed'
   return 'active'
+}
+
+/** 待确认改期的目标时间文案。模板里抽成函数，避免 vue-tsc 对嵌套可空字段的窄化报错 */
+function rescheduleTime(o: Order): string {
+  const rs = o.pending_reschedule
+  if (!rs) return ''
+  return `${friendlyDate(rs.to_date)} ${slotLabel(rs.to_slot)}`
 }
 
 /** 底部按钮组，按状态给不同引导 */
@@ -113,6 +126,13 @@ function actions(o: Order): { label: string; kind: 'ghost' | 'primary'; key: str
   if (o.status === 'canceled' || o.status === 'rejected') {
     return [{ label: '再次预约', kind: 'primary', key: 'again' }]
   }
+  // 有待确认的改期申请时，主按钮直接指向「处理改期」而不是泛泛的「查看进度」
+  if (o.pending_reschedule) {
+    return [
+      { label: '联系服务方', kind: 'ghost', key: 'contact' },
+      { label: '处理改期', kind: 'primary', key: 'detail' },
+    ]
+  }
   return [
     { label: '联系服务方', kind: 'ghost', key: 'contact' },
     { label: '查看进度', kind: 'primary', key: 'detail' },
@@ -125,12 +145,8 @@ function onAction(o: Order, key: string) {
       uni.navigateTo({ url: `/pages/order/create?type=${o.service_type}` })
       break
     case 'contact':
-      // 服务方联系方式不在订单里，接单后才由平台下发
-      uni.showModal({
-        title: '联系服务方',
-        content: '服务方接单后，平台会通过短信发送联系方式',
-        showCancel: false,
-      })
+      // 未接单只提示，接单后才显示电话（逻辑集中在 utils/provider-contact）
+      contactProvider(o.order_no)
       break
     default:
       goDetail(o.order_no)
@@ -140,16 +156,18 @@ function onAction(o: Order, key: string) {
 
 <template>
   <view class="page">
-    <!-- 分段控制器：深青绿底，选中项浅色块 -->
-    <view class="seg">
-      <view
-        v-for="t in tabs"
-        :key="t.key"
-        class="seg-item"
-        :class="{ active: activeTab === t.key }"
-        @tap="switchTab(t.key)"
-      >
-        {{ t.label }}
+    <!-- 分段控制器吸顶：列表滚动时保持在顶部，切换 tab 不用滚回去 -->
+    <view class="seg-wrap">
+      <view class="seg">
+        <view
+          v-for="t in tabs"
+          :key="t.key"
+          class="seg-item"
+          :class="{ active: activeTab === t.key }"
+          @tap="switchTab(t.key)"
+        >
+          {{ t.label }}
+        </view>
       </view>
     </view>
 
@@ -158,6 +176,18 @@ function onAction(o: Order, key: string) {
     </view>
 
     <view v-for="o in orders" :key="o.order_no" class="order-card">
+      <!-- 服务方申请改期：必须在列表就能看到，否则住户要逐单点进详情才知道有人在等自己确认 -->
+      <view v-if="o.pending_reschedule" class="rs-banner" @tap.stop="goDetail(o.order_no)">
+        <view class="rs-banner-body">
+          <view class="rs-banner-title">
+            <text class="rs-banner-tag">待确认</text>
+            <text class="rs-banner-name">服务方申请改期</text>
+          </view>
+          <text class="rs-banner-time">改到 {{ rescheduleTime(o) }}</text>
+        </view>
+        <text class="rs-banner-go">去处理 ›</text>
+      </view>
+
       <view class="top">
         <view class="thumb" :class="o.service_type">{{ ICONS[o.service_type] || '📦' }}</view>
         <view class="head-main">
@@ -202,9 +232,21 @@ function onAction(o: Order, key: string) {
 
 <style scoped>
 .page {
-  padding-top: 20rpx;
-  /* 给固定 TabBar 留位置 */
+  /* 顶部内边距交给吸顶容器，否则吸顶后卡片会从缝隙里露出来 */
   padding-bottom: 160rpx;
+}
+
+/*
+ * 分段器吸顶容器：
+ * - sticky 不占额外高度，滚动到位后自动黏住，省得算固定高度；
+ * - 必须给不透明底色，否则卡片会从分段器下方的圆角缝隙里透出来。
+ */
+.seg-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding: 20rpx 0 0;
+  background: var(--bg);
 }
 
 /* ---------- 分段控制器 ---------- */
@@ -242,6 +284,64 @@ function onAction(o: Order, key: string) {
 .top {
   display: flex;
   gap: 20rpx;
+}
+
+/* ---------- 改期待确认提示 ---------- */
+/* 用橙色（牌面里代表「需要你动作」）而不是主色绿，避免和「进行中」的常态混淆 */
+.rs-banner {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  margin-bottom: 20rpx;
+  padding: 16rpx 18rpx;
+  background: #fff8ed;
+  border: 1rpx solid #fcd9a4;
+  border-radius: 14rpx;
+}
+
+.rs-banner-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.rs-banner-title {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+.rs-banner-tag {
+  flex-shrink: 0;
+  padding: 2rpx 10rpx;
+  border-radius: 6rpx;
+  background: #d97706;
+  color: #fff;
+  font-size: 19rpx;
+  font-weight: 700;
+}
+
+.rs-banner-name {
+  font-size: 25rpx;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.rs-banner-time {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: #b45309;
+  opacity: 0.86;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rs-banner-go {
+  flex-shrink: 0;
+  font-size: 23rpx;
+  font-weight: 600;
+  color: #d97706;
 }
 
 .thumb {

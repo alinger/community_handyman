@@ -15,6 +15,8 @@ const settingDefault = ref(0) // 正在设为默认的地址 id，防重复点�
 const deletingId = ref(0) // 正在删除的地址 id，防重复点击
 const checkMsg = ref<{ ok: boolean; text: string } | null>(null)
 const communities = ref<string[]>([])
+/** 小区选择弹层：showActionSheet 上限 6 项，后台小区已 12 个 */
+const showCommunityPicker = ref(false)
 
 const form = reactive({
   community: '',
@@ -41,18 +43,25 @@ async function loadCommunities() {
   }
 }
 
-function chooseCommunity() {
+/**
+ * 小区从后台配置列表点选。不能用 uni.showActionSheet：
+ * 微信限制 itemList 最多 6 项，后台已配 12 个小区，超限会直接 fail 且无提示。
+ */
+async function chooseCommunity() {
   if (!communities.value.length) {
-    uni.showToast({ title: '暂无可选小区', icon: 'none' })
+    await loadCommunities()
+  }
+  if (!communities.value.length) {
+    uni.showToast({ title: '小区列表加载失败，请重试', icon: 'none' })
     return
   }
-  uni.showActionSheet({
-    itemList: communities.value,
-    success: (r) => {
-      form.community = communities.value[r.tapIndex]
-      onCheck()
-    },
-  })
+  showCommunityPicker.value = true
+}
+
+function pickCommunity(name: string) {
+  form.community = name
+  showCommunityPicker.value = false
+  onCheck()
 }
 
 function openAdd() {
@@ -271,6 +280,28 @@ async function onDelete(id: number) {
         </view>
       </view>
     </view>
+    <!-- 小区选择弹层（盖在地址弹层之上） -->
+    <view v-if="showCommunityPicker" class="mask mask-top" @tap="showCommunityPicker = false">
+      <view class="sheet" @tap.stop>
+        <view class="sheet-title">选择小区</view>
+        <scroll-view scroll-y class="comm-list">
+          <view
+            v-for="c in communities"
+            :key="c"
+            class="comm-item"
+            :class="{ active: c === form.community }"
+            @tap="pickCommunity(c)"
+          >
+            <text class="comm-name">{{ c }}</text>
+            <text v-if="c === form.community" class="comm-check">✓</text>
+          </view>
+        </scroll-view>
+        <view class="sheet-actions">
+          <view class="btn-ghost full" @tap="showCommunityPicker = false">关闭</view>
+        </view>
+      </view>
+    </view>
+
   </view>
 </template>
 
@@ -392,6 +423,39 @@ async function onDelete(id: number) {
   border-radius: 32rpx 32rpx 0 0;
   padding: 40rpx 32rpx;
   padding-bottom: calc(40rpx + env(safe-area-inset-bottom));
+}
+
+.mask-top {
+  z-index: 220;
+}
+
+.comm-list {
+  height: 56vh;
+}
+
+.comm-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 26rpx 20rpx;
+  border-bottom: 1rpx solid #f3f4f6;
+  font-size: 28rpx;
+  color: var(--text);
+}
+
+.comm-item.active {
+  color: var(--brand);
+  background: var(--brand-tint);
+  font-weight: 600;
+}
+
+.comm-check {
+  color: var(--brand);
+  font-size: 26rpx;
+}
+
+.btn-ghost.full {
+  flex: 1;
 }
 
 .sheet-title {

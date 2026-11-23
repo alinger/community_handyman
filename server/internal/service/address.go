@@ -42,6 +42,39 @@ func (s *AddressService) Communities(ctx context.Context) ([]string, error) {
 	return list, nil
 }
 
+// AreaScopes 返回已开通的服务范围，按小区聚合。
+//
+// 「服务范围」页要展示的是「我住的小区在不在里面」，所以按小区分组、
+// 每组带上路段与门牌区间；顺序沿用后台配置顺序（先配的排前面），
+// 不用 map 直接遍历，避免每次刷新顺序都不一样。
+func (s *AddressService) AreaScopes(ctx context.Context) ([]dto.ServiceAreaScope, error) {
+	areas, err := s.areas.ListActive(ctx)
+	if err != nil {
+		return nil, errs.Wrap(errs.CodeInternal, err)
+	}
+
+	out := make([]dto.ServiceAreaScope, 0, len(areas))
+	index := make(map[string]int, len(areas))
+	for _, a := range areas {
+		pos, ok := index[a.Community]
+		if !ok {
+			index[a.Community] = len(out)
+			out = append(out, dto.ServiceAreaScope{
+				Community: a.Community,
+				Lanes:     make([]dto.ServiceAreaLane, 0, 2),
+			})
+			pos = len(out) - 1
+		}
+		out[pos].Lanes = append(out[pos].Lanes, dto.ServiceAreaLane{
+			Lane:        a.Lane,
+			HouseFrom:   a.HouseFrom,
+			HouseTo:     a.HouseTo,
+			HouseParity: a.HouseParity,
+		})
+	}
+	return out, nil
+}
+
 // Create 新增地址。范围校验前置到这里，下单时不再重复判定。
 func (s *AddressService) Create(ctx context.Context, userID uint64, req dto.CreateAddressReq) (*model.Address, error) {
 	area, err := s.Check(ctx, req.Community, req.Lane, req.HouseNo)

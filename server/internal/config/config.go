@@ -20,8 +20,10 @@ type Config struct {
 	Redis    RedisConfig    `yaml:"redis"`
 	Wechat   WechatConfig   `yaml:"wechat"`
 	Auth     AuthConfig     `yaml:"auth"`
+	Security SecurityConfig `yaml:"security"`
 	Payment  PaymentConfig  `yaml:"payment"`
 	Storage  StorageConfig  `yaml:"storage"`
+	SMS      SMSConfig      `yaml:"sms"`
 }
 
 type AppConfig struct {
@@ -54,13 +56,17 @@ type RedisConfig struct {
 
 // Wechat 保存微信支付所需凭据，私钥只存路径不存内容。
 type WechatConfig struct {
-	AppID           string `yaml:"app_id"`
+	AppID string `yaml:"app_id"`
+	// AppSecret 是 wx.login 换 openid 必需的（与支付证书无关，别混用）
+	AppSecret       string `yaml:"app_secret"`
 	MchID           string `yaml:"mch_id"`
 	SerialNo        string `yaml:"serial_no"`
 	APIv3Key        string `yaml:"api_v3_key"`
 	PrivateKeyPath  string `yaml:"private_key_path"`
 	NotifyURL       string `yaml:"notify_url"`
 	RefundNotifyURL string `yaml:"refund_notify_url"`
+	// SubscribeTemplateID 订阅消息模板 ID；未配置时订单状态通知只记日志不发送
+	SubscribeTemplateID string `yaml:"subscribe_template_id"`
 }
 
 // AuthConfig 鉴权配置。secret 用于签发 token，生产必须通过环境变量注入。
@@ -69,11 +75,23 @@ type AuthConfig struct {
 	TokenTTL time.Duration `yaml:"token_ttl"`
 }
 
+// SecurityConfig 敏感字段加密配置。
+// 门禁密码、钥匙说明等落库前必须加密，密钥独立于登录签名密钥，
+// 这样更换 AUTH_SECRET 不会让历史密文全部失效。
+type SecurityConfig struct {
+	// AccessKey 对称加密口令，任意长度，内部 SHA-256 派生 32 字节密钥。
+	// 留空时退回用 AUTH_SECRET 派生，保证老环境不改配置也能启动。
+	AccessKey string `yaml:"access_key"`
+}
+
 // PaymentConfig 支付渠道配置。provider 决定使用哪个实现：
 // sandbox 用于本地联调，wechat 需要商户号与证书。
 type PaymentConfig struct {
 	Provider      string `yaml:"provider"`
 	SandboxSecret string `yaml:"sandbox_secret"`
+	// SkipPay 为真时下单即视为已支付，不进入支付环节。
+	// 商户号与证书下来之前用它保持交易链路通畅；接微信支付后改回 false。
+	SkipPay bool `yaml:"skip_pay"`
 }
 
 type StorageConfig struct {
@@ -84,6 +102,17 @@ type StorageConfig struct {
 	Bucket    string `yaml:"bucket"`
 	AccessKey string `yaml:"access_key"`
 	SecretKey string `yaml:"secret_key"`
+}
+
+// SMSConfig 短信渠道配置。provider 决定实现：aliyun 走阿里云短信，
+// console 只把验证码打到日志，仅限本地联调。
+type SMSConfig struct {
+	Provider        string `yaml:"provider"`
+	AccessKeyID     string `yaml:"access_key_id"`
+	AccessKeySecret string `yaml:"access_key_secret"`
+	SignName        string `yaml:"sign_name"`
+	TemplateCode    string `yaml:"template_code"`
+	Endpoint        string `yaml:"endpoint"`
 }
 
 // Load 读取 yaml 配置并把 ${VAR} 形式的占位符替换为环境变量值。
@@ -105,6 +134,19 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("解析配置文件失败: %w", err)
 	}
 
+	// 支付开关允许用环境变量覆盖 yaml：
+	// 商户号下来后切换支付渠道时，改环境变量比改配置文件更不容易漏改环境。
+	if v := strings.TrimSpace(os.Getenv("PAYMENT_SKIP_PAY")); v != "" {
+		switch v {
+		case "true", "1", "yes":
+			cfg.Payment.SkipPay = true
+		case "false", "0", "no":
+			cfg.Payment.SkipPay = false
+		default:
+			return nil, fmt.Errorf("PAYMENT_SKIP_PAY 只能是 true / false，当前为 %q", v)
+		}
+	}
+
 	// 占位符未注入环境变量时展开为空串。
 	// 只有 dev 允许回落到默认值；生产环境必须显式注入，
 	// 否则会带着 localhost 的 DSN 或默认密钥上线，出问题是静默的。
@@ -124,6 +166,16 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Auth.TokenTTL <= 0 {
 		cfg.Auth.TokenTTL = Default().Auth.TokenTTL
+	}
+
+	// 未显式配置短信渠道时：dev 打日志方便联调，其余环境按阿里云处理，
+	// 让缺失密钥在启动阶段就暴露，而不是用户点"获取验证码"时才失败。
+	if strings.TrimSpace(cfg.SMS.Provider) == "" {
+		if cfg.App.Env == "dev" {
+			cfg.SMS.Provider = "console"
+		} else {
+			cfg.SMS.Provider = "aliyun"
+		}
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -186,6 +238,20 @@ func (c *Config) Validate() error {
 	// 生产环境不允许用默认密钥，否则任何人可伪造后台 token
 	if c.App.Env != "dev" && strings.Contains(c.Auth.Secret, "dev-only") {
 		return fmt.Errorf("生产环境必须通过 AUTH_SECRET 环境变量设置鉴权密钥")
+	}
+	// 生产环境不能只把验证码打日志，否则用户永远收不到短信
+	switch c.SMS.Provider {
+	case "aliyun":
+		if strings.TrimSpace(c.SMS.AccessKeyID) == "" || strings.TrimSpace(c.SMS.AccessKeySecret) == "" ||
+			strings.TrimSpace(c.SMS.SignName) == "" || strings.TrimSpace(c.SMS.TemplateCode) == "" {
+			return fmt.Errorf("短信渠道 aliyun 需要 SMS_ACCESS_KEY_ID / SMS_ACCESS_KEY_SECRET / SMS_SIGN_NAME / SMS_TEMPLATE_CODE")
+		}
+	case "console":
+		if c.App.Env != "dev" {
+			return fmt.Errorf("环境 %s 不允许使用 console 短信渠道", c.App.Env)
+		}
+	default:
+		return fmt.Errorf("sms.provider 只能是 aliyun 或 console，当前为 %q", c.SMS.Provider)
 	}
 	return nil
 }

@@ -18,39 +18,56 @@ import (
 
 // API 聚合各业务 handler。
 type API struct {
-	Address  *service.AddressService
-	Order    *service.OrderService
-	Payment  *service.PaymentService
-	User     *service.UserService
-	Auth     *service.AuthService
-	Record   *service.RecordService
-	Provider *service.ProviderService
-	Admin    *service.AdminService
-	Refund   *service.RefundService
+	Address     *service.AddressService
+	Order       *service.OrderService
+	Payment     *service.PaymentService
+	User        *service.UserService
+	Auth        *service.AuthService
+	Record      *service.RecordService
+	Provider    *service.ProviderService
+	Admin       *service.AdminService
+	Refund      *service.RefundService
 	Quote       *service.QuoteService
 	Monthly     *service.MonthlyService
 	ProviderApp *service.ProviderAppService
+	SMS         *service.SmsService
+	WechatAuth  *service.WechatAuthService
+	Avatar      *service.AvatarService
+	Quota       *service.QuotaService
+	// Reschedule 改期（住户直接改 / 服务方申请 / 住户确认）
+	Reschedule *service.RescheduleService
 
 	Env      string
 	TokenTTL time.Duration
+	// Secret 用于签发文件直链的短期票据（Auth 密钥），与登录 token 同源
+	Secret string
+	// SkipPay 为真时下单后直接按支付成功推进订单（试运行期，未接微信支付）
+	SkipPay bool
 }
 
 // Deps 是 handler 的依赖集合，参数较多时用具名结构比长参数列表清晰。
 type Deps struct {
-	Address  *service.AddressService
-	Order    *service.OrderService
-	Payment  *service.PaymentService
-	User     *service.UserService
-	Auth     *service.AuthService
-	Record   *service.RecordService
-	Provider *service.ProviderService
-	Admin    *service.AdminService
-	Refund   *service.RefundService
+	Address     *service.AddressService
+	Order       *service.OrderService
+	Payment     *service.PaymentService
+	User        *service.UserService
+	Auth        *service.AuthService
+	Record      *service.RecordService
+	Provider    *service.ProviderService
+	Admin       *service.AdminService
+	Refund      *service.RefundService
 	Quote       *service.QuoteService
 	Monthly     *service.MonthlyService
 	ProviderApp *service.ProviderAppService
+	SMS         *service.SmsService
+	WechatAuth  *service.WechatAuthService
+	Avatar      *service.AvatarService
+	Quota       *service.QuotaService
+	Reschedule  *service.RescheduleService
 	Env         string
 	TokenTTL    time.Duration
+	Secret      string
+	SkipPay     bool
 }
 
 // New 构造 handler 集合。
@@ -58,8 +75,10 @@ func New(d Deps) *API {
 	return &API{
 		Address: d.Address, Order: d.Order, Payment: d.Payment, User: d.User, Auth: d.Auth,
 		Record: d.Record, Provider: d.Provider, Admin: d.Admin, Refund: d.Refund,
-		Quote: d.Quote, Monthly: d.Monthly, ProviderApp: d.ProviderApp,
-		Env: d.Env, TokenTTL: d.TokenTTL,
+		Quote: d.Quote, Monthly: d.Monthly, ProviderApp: d.ProviderApp, SMS: d.SMS,
+		WechatAuth: d.WechatAuth, Avatar: d.Avatar, Quota: d.Quota, Env: d.Env, TokenTTL: d.TokenTTL,
+		Reschedule: d.Reschedule,
+		Secret:     d.Secret, SkipPay: d.SkipPay,
 	}
 }
 
@@ -226,6 +245,59 @@ func (a *API) ListAddresses(c *gin.Context) {
 // @Failure      200  {object}  response.Body  "业务错误，见 code"
 // @Security     UserID
 // @Router       /api/v1/addresses/communities [get]
+// GarbagePlan 代倒垃圾包月方案（公开）。
+// @Summary      包月方案
+// @Description  价格、天数、默认取件时段与可选额外时段；数据来自 SKU 规则，改配置不用发版
+// @Tags         服务
+// @Produce      json
+// @Success      200  {object}  response.Body  "data 为 dto.GarbagePlanResp"
+// @Router       /api/v1/services/garbage-plan [get]
+func (a *API) GarbagePlan(c *gin.Context) {
+	res, err := a.Order.GarbagePlan(c.Request.Context())
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, res)
+}
+
+// ListQuotas 我的免费次数。
+// @Summary      免费次数余额
+// @Description  注册赠送的免费倒垃圾次数；remaining 为 0 时前端应引导购买包月
+// @Tags         个人信息
+// @Produce      json
+// @Success      200  {object}  response.Body  "data 为 []dto.QuotaResp"
+// @Security     UserID
+// @Router       /api/v1/me/quotas [get]
+func (a *API) ListQuotas(c *gin.Context) {
+	list, err := a.Quota.List(c.Request.Context(), middleware.CurrentUserID(c))
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, list)
+}
+
+// ListServiceAreas 已开通的服务范围（公开）。
+// @Summary      服务范围
+// @Description  按小区聚合的路段与门牌区间，供「服务范围」页展示；无需登录，访客也能看。
+// @Tags         地址
+// @Produce      json
+// @Success      200  {object}  response.Body  "data 为 []dto.ServiceAreaScope"
+// @Failure      200  {object}  response.Body  "业务错误，见 code"
+// @Router       /api/v1/service-areas [get]
+func (a *API) ListServiceAreas(c *gin.Context) {
+	list, err := a.Address.AreaScopes(c.Request.Context())
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	if list == nil {
+		list = []dto.ServiceAreaScope{}
+	}
+	response.OK(c, list)
+}
+
 func (a *API) ListCommunities(c *gin.Context) {
 	list, err := a.Address.Communities(c.Request.Context())
 	if err != nil {
@@ -353,6 +425,19 @@ func (a *API) CreateOrder(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
+
+	// 试运行期跳过支付：直接按「支付成功」把订单推到待接单，并作废支付参数。
+	// 前端拿到的 order.status 已经是待接单，因此不会再走支付弹窗。
+	// 0 元订单（免费次数抵扣）无论开关如何都没有支付环节，走同一条推进逻辑。
+	if a.SkipPay || order.TotalAmount == 0 {
+		if err := a.Payment.SkipPay(c.Request.Context(), order.OrderNo); err != nil {
+			response.Fail(c, err)
+			return
+		}
+		pay = nil
+	}
+
+	// 跳过支付后状态已变，详情必须重新取
 	detail, derr := a.Order.Detail(c.Request.Context(), order.UserID, order.OrderNo)
 	if derr != nil {
 		response.Fail(c, derr)
@@ -361,6 +446,8 @@ func (a *API) CreateOrder(c *gin.Context) {
 	resp := dto.CreateOrderResp{Order: *detail}
 	if pay != nil {
 		resp.Pay = pay
+	} else if a.SkipPay || order.TotalAmount == 0 {
+		resp.PayHint = "无需在线支付，订单已提交"
 	} else {
 		// 正常流程所有服务都会返回支付参数；这里只留兜底，不再有人工报价
 		resp.PayHint = "请在订单详情页完成支付"
@@ -386,6 +473,10 @@ func (a *API) ListOrders(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
+	// 列表里也要标出「有待确认的改期申请」：不说的话住户要逐单点进详情才知道有人在等自己确认
+	if a.Reschedule != nil {
+		a.Reschedule.AttachPendingTo(c.Request.Context(), list)
+	}
 	response.Page(c, list, total, page, size)
 }
 
@@ -403,6 +494,12 @@ func (a *API) OrderDetail(c *gin.Context) {
 	if err != nil {
 		response.Fail(c, err)
 		return
+	}
+	// 改期信息单独查：列表接口不需要，只有详情要用到「待确认申请」与改期历史
+	if a.Reschedule != nil {
+		a.Reschedule.AttachTo(c.Request.Context(), c.Param("orderNo"), resp)
+		// 服务方看自己的单时，住户改过的日期需要一个明确交代
+		a.Reschedule.AttachProviderNotice(c.Request.Context(), middleware.CurrentUserID(c), resp)
 	}
 	response.OK(c, resp)
 }
@@ -491,7 +588,8 @@ func (a *API) UpdateMe(c *gin.Context) {
 		return
 	}
 	uid := middleware.CurrentUserID(c)
-	u, err := a.User.UpdateProfile(c.Request.Context(), uid, nickname, trimSpace(req.Phone))
+	u, err := a.User.UpdateProfile(c.Request.Context(), uid, nickname, trimSpace(req.Phone),
+		trimSpace(req.Avatar))
 	if err != nil {
 		response.Fail(c, err)
 		return
@@ -505,6 +603,7 @@ func toMeResp(u *model.User) dto.MeResp {
 		Nickname: u.Nickname,
 		Phone:    u.Phone,
 		Role:     u.Role,
+		Avatar:   u.Avatar,
 	}
 }
 

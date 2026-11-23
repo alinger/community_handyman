@@ -26,13 +26,14 @@ type AdminService struct {
 
 	secret   string
 	tokenTTL time.Duration
+	notify   *NotifyService
 }
 
 func NewAdminService(db *gorm.DB, admins *repository.AdminUserRepo, areas *repository.AreaRepo,
 	slots *repository.SlotRepo, skus *repository.SkuRepo, orders *repository.OrderRepo,
-	secret string, ttl time.Duration) *AdminService {
+	secret string, ttl time.Duration, notify *NotifyService) *AdminService {
 	return &AdminService{db: db, admins: admins, areas: areas, slots: slots,
-		skus: skus, orders: orders, secret: secret, tokenTTL: ttl}
+		skus: skus, orders: orders, secret: secret, tokenTTL: ttl, notify: notify}
 }
 
 // ListProviders 返回可派单的服务方，供后台派单下拉选人。
@@ -176,6 +177,19 @@ func (s *AdminService) ListOrders(ctx context.Context, status, serviceType, keyw
 }
 
 // Assign 派单或改派，只能派待接单的订单。
+// assignableStatuses 允许派单/改派的订单状态。
+// 服务开始（in_service）之后不能换人：服务记录、收入归属、责任划分都会跟着错位。
+var assignableStatuses = map[model.OrderStatus]bool{
+	model.OrderPendingAccept: true,
+	model.OrderAccepted:      true,
+	model.OrderOnTheWay:      true,
+}
+
+// Assign 运营派单或改派。
+//
+// 派单即刻生效：订单直接进入「已受理」并把 provider_id 一并写入。
+// 历史实现只写 provider_id 不改状态，会让订单卡死——接单池只列未派单订单，
+// 而接单接口又拒绝已绑定服务方的订单，两边都不通，服务方只能干看着。
 func (s *AdminService) Assign(ctx context.Context, adminID uint64, orderNo string, providerID uint64) error {
 	o, err := s.orders.GetByNo(ctx, orderNo)
 	if err != nil {
@@ -184,24 +198,55 @@ func (s *AdminService) Assign(ctx context.Context, adminID uint64, orderNo strin
 	if o == nil {
 		return errs.Biz(errs.CodeNotFound)
 	}
-	if o.Status != model.OrderPendingAccept {
-		return errs.BizMsg(errs.CodeIllegalStatus, "只有待接单的订单可以派单")
+	if !assignableStatuses[o.Status] {
+		return errs.BizMsg(errs.CodeIllegalStatus, "订单已开始服务，不能派单或改派")
+	}
+	if o.ProviderID != nil && *o.ProviderID == providerID {
+		return errs.BizMsg(errs.CodeInvalidParam, "该订单已指派给此服务方")
 	}
 
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		ok, err := s.orders.WithTx(tx).AssignProvider(ctx, o.ID, providerID)
+	// 目标必须是通过认证的服务方，否则派了也没有人能履约
+	var cnt int64
+	if err := s.db.WithContext(ctx).Model(&model.User{}).
+		Where("id = ? AND role = ?", providerID, "provider").
+		Count(&cnt).Error; err != nil {
+		return errs.Wrap(errs.CodeInternal, err)
+	}
+	if cnt == 0 {
+		return errs.BizMsg(errs.CodeInvalidParam, "目标用户不是已认证的服务方")
+	}
+
+	remark := "运营派单"
+	if o.ProviderID != nil {
+		remark = "运营改派"
+	}
+
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		ok, err := s.orders.WithTx(tx).UpdateStatus(ctx, o.ID,
+			o.Status, model.OrderAccepted,
+			map[string]any{"provider_id": providerID})
 		if err != nil {
 			return errs.Wrap(errs.CodeInternal, err)
 		}
 		if !ok {
-			return errs.Biz(errs.CodeIllegalStatus)
+			// 并发下被接单或已被取消，条件更新会自动失败
+			return errs.BizMsg(errs.CodeIllegalStatus, "订单状态已变化，请刷新后重试")
 		}
 		return s.orders.WithTx(tx).AddEvent(ctx, &model.OrderEvent{
 			OrderID:    o.ID,
-			Node:       string(model.OrderPendingAccept),
+			Node:       string(model.OrderAccepted),
 			Operator:   "admin",
 			OperatorID: &adminID,
-			Remark:     "运营派单",
+			Remark:     remark,
 		})
 	})
+	if err != nil {
+		return err
+	}
+
+	// 派单/改派对住户是「有人接了」的信号，值得推一条；失败不影响派单结果
+	if s.notify != nil {
+		s.notify.OrderEvent(ctx, o.UserID, o.OrderNo, "服务方已接单", remark+"，服务方将按预约时间上门")
+	}
+	return nil
 }

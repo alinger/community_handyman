@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/alinger/community-handyman/server/internal/auth"
 	"github.com/alinger/community-handyman/server/internal/errs"
 	"github.com/alinger/community-handyman/server/internal/middleware"
 	"github.com/alinger/community-handyman/server/internal/model"
@@ -25,6 +26,8 @@ const maxUploadBytes = 80<<20 + 1<<20
 // @Param        orderNo       path      string  true   "订单号"
 // @Param        media_type    formData  string  true   "photo / video / advice / document"
 // @Param        duration_sec  formData  int     false  "视频时长（秒），图片传 0"
+// @Param        owner_consented formData bool   false  "是否已征得主人同意拍摄（默认 false）"
+// @Param        stage         formData  string  false  "凭证阶段：start 开始服务 / finish 完成服务 / 空为过程记录"
 // @Param        file          formData  file    true   "文件"
 // @Success      201  {object}  response.Body  "data 为 service.ToRecordResp"
 // @Failure      200  {object}  response.Body  "1001 类型或大小不合规 / 1003 无权访问该订单"
@@ -42,6 +45,13 @@ func (a *API) UploadRecord(c *gin.Context) {
 
 	mediaType := c.PostForm("media_type")
 	durationSec := atoiDefault(c.PostForm("duration_sec"), 0)
+	// 凭证阶段：start=开始服务 / finish=完成服务 / 空=过程随手拍。
+	// 只认这三个值，别的当空串处理，详情页分组不会出现未知分组。
+	stage := ""
+	switch c.PostForm("stage") {
+	case "start", "finish":
+		stage = c.PostForm("stage")
+	}
 
 	fh, err := c.FormFile("file")
 	if err != nil {
@@ -55,15 +65,30 @@ func (a *API) UploadRecord(c *gin.Context) {
 	}
 	defer f.Close()
 
+	// 流程图 P2：服务中拍照需「经主人同意」，上传时随表单留痕
+	consented := c.PostForm("owner_consented") == "true"
 	rec, err := a.Record.Upload(c.Request.Context(), middleware.CurrentUserID(c),
-		orderNo, mediaType, fh.Filename, f, fh.Size, durationSec)
+		orderNo, mediaType, fh.Filename, f, fh.Size, durationSec, consented, stage)
 	if err != nil {
 		response.Fail(c, err)
 		return
 	}
 
-	out := service.ToRecordResps([]model.ServiceRecord{*rec}, orderNo)
+	out := service.ToRecordResps([]model.ServiceRecord{*rec}, orderNo, a.recordSigner(middleware.CurrentUserID(c)))
 	response.Created(c, out[0])
+}
+
+// recordSigner 返回给当前用户签发直链票据的函数。
+//
+// 未配置密钥或取不到用户时返回 nil，地址退化为裸路径：
+// 那样只有带 Authorization 头才能读，至少不会把文件变成公开可访问。
+func (a *API) recordSigner(uid uint64) func(path string) string {
+	if a.Secret == "" || uid == 0 {
+		return nil
+	}
+	return func(path string) string {
+		return auth.SignMediaTicket(a.Secret, uid, path, auth.MediaTicketTTL)
+	}
 }
 
 // ListRecords 查询订单服务记录。
@@ -81,7 +106,7 @@ func (a *API) ListRecords(c *gin.Context) {
 		response.Fail(c, err)
 		return
 	}
-	response.OK(c, service.ToRecordResps(list, orderNo))
+	response.OK(c, service.ToRecordResps(list, orderNo, a.recordSigner(middleware.CurrentUserID(c))))
 }
 
 // DownloadRecord 流式下载记录文件。

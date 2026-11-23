@@ -87,6 +87,26 @@ func (r *UserRepo) UpdateProfile(ctx context.Context, userID uint64, nickname, p
 		Updates(map[string]any{"nickname": nickname, "phone": phone}).Error
 }
 
+// UpdateWechatProfile 同步微信侧的昵称与头像。
+// 只动这两列：phone 是登录标识，不能被微信登录顺手覆盖。
+func (r *UserRepo) UpdateWechatProfile(ctx context.Context, userID uint64, nickname, avatar string) error {
+	return r.db.WithContext(ctx).Model(&model.User{}).
+		Where("id = ?", userID).
+		Updates(map[string]any{"nickname": nickname, "avatar": avatar}).Error
+}
+
+// UpdatePhone 绑定手机号。phone_key 是生成列，由 MySQL 自动维护。
+func (r *UserRepo) UpdatePhone(ctx context.Context, userID uint64, phone string) error {
+	return r.db.WithContext(ctx).Model(&model.User{}).
+		Where("id = ?", userID).Update("phone", phone).Error
+}
+
+// UpdateAvatar 写入头像地址（不含协议与域名，形如 /api/v1/users/12/avatar/xxx.png）。
+func (r *UserRepo) UpdateAvatar(ctx context.Context, userID uint64, avatar string) error {
+	return r.db.WithContext(ctx).Model(&model.User{}).
+		Where("id = ?", userID).Update("avatar", avatar).Error
+}
+
 // AddressRepo 地址数据访问。
 type AddressRepo struct {
 	db *gorm.DB

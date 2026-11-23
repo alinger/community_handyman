@@ -56,14 +56,24 @@ func (s *PaymentService) HandleNotify(ctx context.Context, header http.Header, b
 		return errs.BizMsg(errs.CodeInvalidParam, "支付金额与订单不一致")
 	}
 
+	return s.applyPaid(ctx, o, notify.TransactionID, notify.OutTradeNo, notify.Amount, body)
+}
+
+// applyPaid 把订单推进到「待接单」并记一条支付流水。
+//
+// 微信回调和「试运行期跳过支付」共用这一段：
+// 幂等靠 transaction_id 唯一索引，状态推进靠「待支付 → 待接单」的 CAS 更新，
+// 因此两条入口的语义完全一致，只是流水号来源不同。
+func (s *PaymentService) applyPaid(ctx context.Context, o *model.Order,
+	transactionID, outTradeNo string, amount int64, raw []byte) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		pt := &model.PaymentTransaction{
-			OrderNo:       notify.OrderNo,
-			TransactionID: notify.TransactionID,
-			OutTradeNo:    notify.OutTradeNo,
-			Amount:        notify.Amount,
+			OrderNo:       o.OrderNo,
+			TransactionID: transactionID,
+			OutTradeNo:    outTradeNo,
+			Amount:        amount,
 			Status:        model.PayStatusSuccess,
-			RawCallback:   body,
+			RawCallback:   raw,
 			PaidAt:        timePtr(time.Now()),
 		}
 		if err := s.payments.WithTx(tx).InsertTransaction(ctx, pt); err != nil {
@@ -77,14 +87,14 @@ func (s *PaymentService) HandleNotify(ctx context.Context, header http.Header, b
 		// 订单可能已被超时关单：流水已记，但状态不再推进，需人工退款
 		if o.Status != model.OrderPendingPayment {
 			slog.Error("支付成功但订单已不在待支付状态，需人工处理",
-				"order_no", o.OrderNo, "status", o.Status, "transaction_id", notify.TransactionID)
+				"order_no", o.OrderNo, "status", o.Status, "transaction_id", transactionID)
 			return nil
 		}
 
 		ok, err := s.orders.WithTx(tx).UpdateStatus(ctx, o.ID,
 			model.OrderPendingPayment, model.OrderPendingAccept,
 			map[string]any{
-				"paid_amount": notify.Amount,
+				"paid_amount": amount,
 				"paid_at":     time.Now(),
 			})
 		if err != nil {
@@ -102,6 +112,46 @@ func (s *PaymentService) HandleNotify(ctx context.Context, header http.Header, b
 			Remark:   "支付成功，等待服务方接单",
 		})
 	})
+}
+
+// SkipPay 试运行期跳过支付：下单后直接按「支付成功」推进订单。
+//
+// 为什么不能只在前端跳过：订单停在「待支付」会被 15 分钟超时任务关单，
+// 时段也会被释放。所以必须走服务端的状态推进，只是把流水号换成 skip_ 前缀，
+// 财务对账时一眼能看出这笔不是真实支付（接微信支付后即消失）。
+func (s *PaymentService) SkipPay(ctx context.Context, orderNo string) error {
+	o, err := s.orders.GetByNo(ctx, orderNo)
+	if err != nil {
+		return errs.Wrap(errs.CodeInternal, err)
+	}
+	if o == nil {
+		return errs.Biz(errs.CodeNotFound)
+	}
+	// 已经不在待支付（重复调用或免支付订单）时什么都不做
+	if o.Status != model.OrderPendingPayment {
+		return nil
+	}
+	// 0 元订单没有支付环节，直接把状态推过去，不记流水
+	if o.TotalAmount <= 0 {
+		ok, err := s.orders.UpdateStatus(ctx, o.ID,
+			model.OrderPendingPayment, model.OrderPendingAccept,
+			map[string]any{"paid_at": time.Now()})
+		if err != nil {
+			return errs.Wrap(errs.CodeInternal, err)
+		}
+		if !ok {
+			return nil
+		}
+		return s.orders.AddEvent(ctx, &model.OrderEvent{
+			OrderID:  o.ID,
+			Node:     string(model.OrderPendingAccept),
+			Operator: "system",
+			Remark:   "0 元订单，无需支付",
+		})
+	}
+
+	raw := []byte(`{"channel":"skip","reason":"试运行期跳过支付，未发生真实扣款"}`)
+	return s.applyPaid(ctx, o, "skip_"+o.OrderNo, "SKIP-"+o.OrderNo, o.TotalAmount, raw)
 }
 
 // MockPay 模拟一笔支付成功，仅沙箱渠道可用，且只在 dev 环境注册路由。

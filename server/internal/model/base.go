@@ -91,7 +91,10 @@ var allowedTransitions = map[OrderStatus][]OrderStatus{
 	OrderPendingAccept:  {OrderAccepted, OrderRejected, OrderCanceled},
 	OrderAccepted:       {OrderOnTheWay, OrderInService, OrderCanceled},
 	OrderOnTheWay:       {OrderInService, OrderCanceled},
-	OrderInService:      {OrderPendingConfirm, OrderCanceled},
+	// 服务中可以直接完成：垃圾代倒一次上门即结束，不需要住户再点一次确认。
+	// 这类「跳过确认」只对垃圾放开，是否允许由 ProviderService 按服务类型判定，
+	// 状态机本身只表达「结构上可以这么流转」。
+	OrderInService:      {OrderPendingConfirm, OrderCompleted, OrderCanceled},
 	OrderPendingConfirm: {OrderCompleted, OrderInService},
 	OrderCompleted:      {},
 	OrderCanceled:       {},

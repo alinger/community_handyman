@@ -5,7 +5,7 @@ import TabBar from '@/components/TabBar.vue'
 import { acceptOrder, providerOpenOrders, type Order } from '@/api'
 import { useUserStore } from '@/store/user'
 import { ensureAuth } from '@/utils/auth'
-import { friendlyDate, price, SERVICE_LABEL, SLOTS } from '@/utils/format'
+import { friendlyDate, price, SERVICE_LABEL, slotTextOf } from '@/utils/format'
 import { ApiError } from '@/utils/request'
 
 const user = useUserStore()
@@ -66,9 +66,15 @@ async function onAccept(o: Order) {
   actingNo.value = o.order_no
   try {
     await acceptOrder(o.order_no)
+    // 包月接的是整段服务期，不是一个时段：弹窗里把「每天要来」说清楚，
+    // 否则服务方按单次的心态接下，第二天才发现还有 29 天
+    const content =
+      o.plan === 'monthly'
+        ? `${SERVICE_LABEL[o.service_type]} · 包月至 ${shortDate(o.monthly_end || o.service_date)}，每天需上门，当天在任务列表打卡`
+        : `${SERVICE_LABEL[o.service_type]} · ${friendlyDate(o.service_date)}，请在任务列表查看`
     uni.showModal({
       title: '接单成功',
-      content: `${SERVICE_LABEL[o.service_type]} · ${friendlyDate(o.service_date)}，请在任务列表查看`,
+      content,
       showCancel: false,
     })
     await fetchPage()
@@ -85,7 +91,38 @@ async function onAccept(o: Order) {
 }
 
 function slotLabel(code: string): string {
-  return SLOTS.find((s) => s.code === code)?.label || code
+  return slotTextOf(code)
+}
+
+/**
+ * 包月订单不是「跑一趟」，是每天上门跑满整段服务期。
+ * 接单池里它的价格和单次一模一样（都是 ¥30），只写日期和时段的话
+ * 服务方会当成普通单次接走，接了才发现要连着来一个月。
+ */
+function monthlyPlanText(o: Order): string {
+  const start = o.monthly_start || o.service_date
+  const days = monthlyDays(o)
+  return `${shortDate(start)} 起${days > 0 ? ' ' + days + ' 天' : ''} · 每天 ${slotLabel(o.extra_slot_code || o.slot_code)}`
+}
+
+/** 服务期天数（含首尾）。直接用日期字符串相减，避免本地时区把首尾各算错一天 */
+function monthlyDays(o: Order): number {
+  if (!o.monthly_start || !o.monthly_end) return 0
+  const ms = Date.parse(o.monthly_end) - Date.parse(o.monthly_start)
+  if (Number.isNaN(ms)) return 0
+  return Math.round(ms / 86400000) + 1
+}
+
+/** 2026-11-22 → 11/22，接单池不需要年份 */
+function shortDate(d: string): string {
+  if (!d) return ''
+  return d.slice(5).replace('-', '/')
+}
+
+/** 服务时间一行说清：单次是某天某时段，包月是起始日 + 天数 + 每天时段 */
+function whenText(o: Order): string {
+  if (o.plan === 'monthly') return monthlyPlanText(o)
+  return `${friendlyDate(o.service_date)} · ${slotLabel(o.slot_code)}`
 }
 </script>
 
@@ -101,12 +138,16 @@ function slotLabel(code: string): string {
 
     <view v-for="o in orders" :key="o.order_no" class="pool-card">
       <view class="head">
-        <text class="service">{{ SERVICE_LABEL[o.service_type] }}</text>
+        <view class="head-left">
+          <text class="service">{{ SERVICE_LABEL[o.service_type] }}</text>
+          <!-- 包月和单次在池子里价格相同，不给标识等于让服务方盲接 -->
+          <text v-if="o.plan === 'monthly'" class="badge">包月</text>
+        </view>
         <text class="amount">{{ price(o.total_amount) }}</text>
       </view>
 
       <view class="meta">
-        {{ friendlyDate(o.service_date) }} · {{ slotLabel(o.slot_code) }}
+        {{ whenText(o) }}
       </view>
 
       <view v-if="o.address" class="addr">
@@ -124,7 +165,8 @@ function slotLabel(code: string): string {
           :class="{ disabled: actingNo === o.order_no }"
           @tap.stop="onAccept(o)"
         >
-          {{ actingNo === o.order_no ? '抢单中…' : '立即接单' }}
+          <!-- 包月是一个月的活，按钮上就写明白，别让服务方按单次的心态点下去 -->
+          {{ actingNo === o.order_no ? '抢单中…' : o.plan === 'monthly' ? '接包月单' : '立即接单' }}
         </view>
       </view>
     </view>
@@ -165,6 +207,21 @@ function slotLabel(code: string): string {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.head-left {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+/* 包月标签：与任务列表用同一套颜色，服务方在两个页面看到的是同一个记号 */
+.badge {
+  font-size: 20rpx;
+  color: #b45309;
+  background: #fef3c7;
+  padding: 4rpx 12rpx;
+  border-radius: 8rpx;
 }
 
 .service {

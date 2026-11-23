@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"regexp"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 
 // 手机号与密码的长度约束，与前端校验保持一致。
 const (
-	phonePattern  = `^1[3-9]\d{9}$`
+	phonePattern   = `^1[3-9]\d{9}$`
 	minPasswordLen = 6
 	maxPasswordLen = 32
 )
@@ -29,18 +30,34 @@ var phoneRe = regexp.MustCompile(phonePattern)
 // openid 仍保留唯一约束，将来接微信登录时按 openid 找人或补绑手机号。
 type AuthService struct {
 	users    *repository.UserRepo
+	quotas   *repository.QuotaRepo
 	secret   string
 	tokenTTL time.Duration
 }
 
-func NewAuthService(users *repository.UserRepo, secret string, ttl time.Duration) *AuthService {
-	return &AuthService{users: users, secret: secret, tokenTTL: ttl}
+func NewAuthService(users *repository.UserRepo, quotas *repository.QuotaRepo,
+	secret string, ttl time.Duration) *AuthService {
+	return &AuthService{users: users, quotas: quotas, secret: secret, tokenTTL: ttl}
+}
+
+// 注册赠送的免费倒垃圾次数。改这里即可调整，无需动数据库。
+const registerFreeGarbageQuota = 2
+
+// grantWelcomeQuota 发放注册礼：免费倒垃圾次数。
+// 失败只记日志不阻断注册 —— 额度发不出去可以补发，注册失败会让用户体验直接断掉。
+func (s *AuthService) grantWelcomeQuota(ctx context.Context, userID uint64) {
+	if s.quotas == nil {
+		return
+	}
+	if err := s.quotas.Grant(ctx, userID, model.ServiceGarbage, registerFreeGarbageQuota); err != nil {
+		slog.Error("发放注册免费次数失败", "user_id", userID, "err", err)
+	}
 }
 
 // Session 登录/注册成功后返回给前端的内容。
 type Session struct {
-	Token     string `json:"token"`
-	ExpiresIn int    `json:"expires_in"`
+	Token     string   `json:"token"`
+	ExpiresIn int      `json:"expires_in"`
 	User      UserInfo `json:"user"`
 }
 
@@ -50,6 +67,7 @@ type UserInfo struct {
 	Nickname string `json:"nickname"`
 	Phone    string `json:"phone"`
 	Role     string `json:"role"`
+	Avatar   string `json:"avatar"`
 }
 
 // Register 手机号注册。openid 用手机号派生，保证唯一且不与 dev 账号冲突。
@@ -91,6 +109,7 @@ func (s *AuthService) Register(ctx context.Context, phone, password, nickname st
 		return nil, errs.Wrap(errs.CodeInternal, err)
 	}
 
+	s.grantWelcomeQuota(ctx, u.ID)
 	return s.session(u)
 }
 
@@ -159,6 +178,7 @@ func (s *AuthService) session(u *model.User) (*Session, error) {
 			Nickname: u.Nickname,
 			Phone:    u.Phone,
 			Role:     u.Role,
+			Avatar:   u.Avatar,
 		},
 	}, nil
 }

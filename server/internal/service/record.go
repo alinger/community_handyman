@@ -37,7 +37,7 @@ func NewRecordService(records *repository.RecordRepo, orders *repository.OrderRe
 // Upload 保存一条服务记录。
 // 只允许订单的用户本人与该单服务方上传；记录一经写入不可删除。
 func (s *RecordService) Upload(ctx context.Context, userID uint64, orderNo, mediaType, filename string,
-	r io.Reader, size int64, durationSec int) (*model.ServiceRecord, error) {
+	r io.Reader, size int64, durationSec int, ownerConsented bool, stage string) (*model.ServiceRecord, error) {
 
 	order, err := s.orders.GetByNo(ctx, orderNo)
 	if err != nil {
@@ -62,13 +62,15 @@ func (s *RecordService) Upload(ctx context.Context, userID uint64, orderNo, medi
 	}
 
 	rec := &model.ServiceRecord{
-		OrderID:      order.ID,
-		MediaType:    mediaType,
-		ObjectKey:    obj.Key,
-		Size:         obj.Size,
-		DurationSec:  durationSec,
-		UploaderID:   userID,
-		UploaderRole: roleOf(order, userID),
+		OrderID:        order.ID,
+		MediaType:      mediaType,
+		ObjectKey:      obj.Key,
+		Size:           obj.Size,
+		DurationSec:    durationSec,
+		OwnerConsented: ownerConsented,
+		Stage:          stage,
+		UploaderID:     userID,
+		UploaderRole:   roleOf(order, userID),
 	}
 	if err := s.records.Create(ctx, rec); err != nil {
 		return nil, errs.Wrap(errs.CodeInternal, err)
@@ -216,28 +218,41 @@ func roleOf(o *model.Order, userID uint64) string {
 
 // ToRecordResp 记录响应，不返回 object_key，避免绕过鉴权直取文件。
 type ToRecordResp struct {
-	ID           uint64    `json:"id"`
-	MediaType    string    `json:"media_type"`
-	Size         int64     `json:"size"`
-	DurationSec  int       `json:"duration_sec"`
+	ID             uint64    `json:"id"`
+	MediaType      string    `json:"media_type"`
+	Size           int64     `json:"size"`
+	DurationSec    int       `json:"duration_sec"`
+	OwnerConsented bool      `json:"owner_consented"`
+	// Stage 凭证阶段：start=开始服务 / finish=完成服务 / 空=过程记录
+	Stage        string    `json:"stage"`
 	UploaderRole string    `json:"uploader_role"`
 	CreatedAt    time.Time `json:"created_at"`
-	// 下载地址仍需鉴权，前端带 X-User-Id 请求
+	// 下载地址。图片/视频由原生组件加载，带不上 Authorization 头，
+	// 因此地址里带一段短期票据（?t=...），由 sign 回调生成。
 	URL string `json:"url"`
 }
 
 // ToRecordResps 批量转换。
-func ToRecordResps(records []model.ServiceRecord, orderNo string) []ToRecordResp {
+// sign 为当前用户签发直链票据，返回空串则不附票据（仅留裸路径，调用方需自行带 header）。
+func ToRecordResps(records []model.ServiceRecord, orderNo string, sign func(path string) string) []ToRecordResp {
 	out := make([]ToRecordResp, 0, len(records))
 	for _, r := range records {
+		path := fmt.Sprintf("/api/v1/orders/%s/records/%d/file", orderNo, r.ID)
+		if sign != nil {
+			if t := sign(path); t != "" {
+				path += "?t=" + t
+			}
+		}
 		out = append(out, ToRecordResp{
-			ID:           r.ID,
-			MediaType:    r.MediaType,
-			Size:         r.Size,
-			DurationSec:  r.DurationSec,
-			UploaderRole: r.UploaderRole,
-			CreatedAt:    r.CreatedAt,
-			URL:          fmt.Sprintf("/api/v1/orders/%s/records/%d/file", orderNo, r.ID),
+			ID:             r.ID,
+			MediaType:      r.MediaType,
+			Size:           r.Size,
+			DurationSec:    r.DurationSec,
+			OwnerConsented: r.OwnerConsented,
+			Stage:          r.Stage,
+			UploaderRole:   r.UploaderRole,
+			CreatedAt:      r.CreatedAt,
+			URL:            path,
 		})
 	}
 	return out

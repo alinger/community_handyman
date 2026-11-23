@@ -25,8 +25,9 @@ type Input struct {
 	PatientName  string   `json:"patient_name"`  // 就诊人
 	ServiceItems []string `json:"service_items"` // 已勾选的陪诊服务项 code
 
-	NeedFamiliar   bool `json:"need_familiar"`   // 是否需要提前上门熟悉
-	FamiliarOrders int  `json:"familiar_orders"` // 该用户历史完成订单数，用于熟悉费减免
+	NeedFamiliar bool `json:"need_familiar"` // 是否需要提前上门熟悉
+	// FamiliarOrders 只统计「单次卡」的已完成订单数（遛宠目前只有单次卡）
+	FamiliarOrders int `json:"familiar_orders"`
 
 	ServiceDate time.Time       `json:"service_date"`
 	Rules       json.RawMessage `json:"-"`
@@ -58,6 +59,17 @@ type Result struct {
 	Total       int64  `json:"total"`        // 应付总额，单位分
 	Items       []Item `json:"items"`        // 明细，必须展示给用户
 	ManualQuote bool   `json:"manual_quote"` // 历史字段：陪诊改为自动计价后恒为 false
+	// Familiar 熟悉费累计进度；只在开启「提前上门熟悉」时非空，
+	// 供前端展示「已完成 3 单，再 2 单免熟悉费」，避免用户只看到一句静态规则
+	Familiar *FamiliarProgress `json:"familiar,omitempty"`
+}
+
+// FamiliarProgress 熟悉费累计进度。
+// 文案里的「5 单」来自后台规则 familiar_free_orders，前端不要写死数字。
+type FamiliarProgress struct {
+	Done int  `json:"done"` // 已完成单次订单数
+	Need int  `json:"need"` // 免熟悉费需要的单数
+	Free bool `json:"free"` // 本次是否已免（达到或超过 Need）
 }
 
 // DogWalkRules 遛宠计价参数，对应 service_skus.rules。
@@ -83,6 +95,12 @@ type GarbageRules struct {
 	BagsIncluded    int   `json:"bags_included"`       // 基础价包含袋数
 	MonthlyPrice    int64 `json:"monthly_price"`       // 包月价
 	MonthlyDailyCap int   `json:"monthly_daily_limit"` // 包月每日次数
+	// DurationDays 包月服务天数（当期产品为 30 天）
+	DurationDays int `json:"duration_days"`
+	// DefaultSlot 包月默认取件时段，用户不选就按这个派单
+	DefaultSlot string `json:"default_slot"`
+	// ExtraSlotOptions 除默认时段外可额外指定的候选时段
+	ExtraSlotOptions []string `json:"extra_slot_options"`
 }
 
 // Calc 计算订单金额。
@@ -112,9 +130,17 @@ func calcGarbage(in Input) (Result, error) {
 		if price == 0 {
 			price = in.BasePrice
 		}
+		days := rules.DurationDays
+		if days <= 0 {
+			days = 30
+		}
+		note := fmt.Sprintf("%d 天，每日 %d 次，不累计不顺延", days, max(rules.MonthlyDailyCap, 1))
+		if rules.DefaultSlot != "" {
+			note += "，默认时段 " + rules.DefaultSlot
+		}
 		return Result{
 			Total: price,
-			Items: []Item{{Name: "包月代倒垃圾", Amount: price, Note: fmt.Sprintf("每日 %d 次，不累计不顺延", max(rules.MonthlyDailyCap, 1))}},
+			Items: []Item{{Name: "包月代倒垃圾", Amount: price, Note: note}},
 		}, nil
 	}
 
@@ -162,42 +188,53 @@ func calcDogWalk(in Input) (Result, error) {
 		pets = 1
 	}
 
-	// 仅喂食清洁：按只计价，不含遛、不收熟悉费
+	var items []Item
+	var total int64
+	var familiar *FamiliarProgress
+
 	if in.FeedOnly {
+		// 仅喂食清洁：按「只数 × 单价」计价，不按时长、不再叠多宠加价。
+		//
+		// 但上门相关的一次性费用仍然成立 —— 送不送狗出去遛，服务方都得进这个门：
+		// 首次上门的熟悉费、超出距离的加价、节假日加价，与「遛不遛」无关。
+		// 早前这里直接 return，导致开了仅喂食后这些费用被静默吞掉，
+		// 用户看到「熟悉开关打开了却没加钱」，像是选项失效。
 		if r.FeedOnly <= 0 {
 			return Result{}, fmt.Errorf("未配置仅喂食单价")
 		}
 		amount := r.FeedOnly * int64(pets)
-		return Result{
-			Total: amount,
-			Items: []Item{{Name: "喂食清洁（不含遛）", Amount: amount, Note: fmt.Sprintf("%d 元/只 × %d 只", r.FeedOnly/100, pets)}},
-		}, nil
-	}
-
-	items := []Item{{Name: "遛狗基础", Amount: r.Base, Note: fmt.Sprintf("含 %d 分钟", r.BaseMinutes)}}
-	total := r.Base
-
-	// 时长加价：超出部分按 10 分钟一档向上取整
-	if in.DurationMin > r.BaseMinutes {
-		if r.MaxMinutes > 0 && in.DurationMin > r.MaxMinutes {
-			return Result{}, fmt.Errorf("单次时长不能超过 %d 分钟", r.MaxMinutes)
-		}
-		extraMin := in.DurationMin - r.BaseMinutes
-		steps := (extraMin + r.StepMinutes - 1) / r.StepMinutes
-		amount := int64(steps) * r.StepPrice
-		items = append(items, Item{
-			Name:   fmt.Sprintf("时长加价 %d 分钟", extraMin),
+		items = []Item{{
+			Name:   "喂食清洁（不含遛）",
 			Amount: amount,
-			Note:   fmt.Sprintf("%d 档 × %d 元", steps, r.StepPrice/100),
-		})
-		total += amount
-	}
+			Note:   fmt.Sprintf("%d 元/只 × %d 只", r.FeedOnly/100, pets),
+		}}
+		total = amount
+	} else {
+		items = []Item{{Name: "遛狗基础", Amount: r.Base, Note: fmt.Sprintf("含 %d 分钟", r.BaseMinutes)}}
+		total = r.Base
 
-	// 多宠加价：第一只含在基础价内
-	if pets > 1 && r.ExtraPet > 0 {
-		amount := int64(pets-1) * r.ExtraPet
-		items = append(items, Item{Name: fmt.Sprintf("多宠 %d 只", pets-1), Amount: amount})
-		total += amount
+		// 时长加价：超出部分按 10 分钟一档向上取整
+		if in.DurationMin > r.BaseMinutes {
+			if r.MaxMinutes > 0 && in.DurationMin > r.MaxMinutes {
+				return Result{}, fmt.Errorf("单次时长不能超过 %d 分钟", r.MaxMinutes)
+			}
+			extraMin := in.DurationMin - r.BaseMinutes
+			steps := (extraMin + r.StepMinutes - 1) / r.StepMinutes
+			amount := int64(steps) * r.StepPrice
+			items = append(items, Item{
+				Name:   fmt.Sprintf("时长加价 %d 分钟", extraMin),
+				Amount: amount,
+				Note:   fmt.Sprintf("%d 档 × %d 元", steps, r.StepPrice/100),
+			})
+			total += amount
+		}
+
+		// 多宠加价：第一只含在基础价内
+		if pets > 1 && r.ExtraPet > 0 {
+			amount := int64(pets-1) * r.ExtraPet
+			items = append(items, Item{Name: fmt.Sprintf("多宠 %d 只", pets-1), Amount: amount})
+			total += amount
+		}
 	}
 
 	// 距离加价
@@ -210,13 +247,19 @@ func calcDogWalk(in Input) (Result, error) {
 		total += r.OverKmPrice
 	}
 
-	// 提前上门熟悉：达到累计次数免费
+	// 提前上门熟悉：单次卡累计满 N 单后免
 	if in.NeedFamiliar && r.Familiar > 0 {
-		if in.FamiliarOrders >= r.FamiliarFreeOrders && r.FamiliarFreeOrders > 0 {
+		free := r.FamiliarFreeOrders > 0 && in.FamiliarOrders >= r.FamiliarFreeOrders
+		if free {
 			items = append(items, Item{Name: "提前上门熟悉", Amount: 0, Note: "累计订单已达标，免费"})
 		} else {
 			items = append(items, Item{Name: "提前上门熟悉", Amount: r.Familiar})
 			total += r.Familiar
+		}
+		familiar = &FamiliarProgress{
+			Done: in.FamiliarOrders,
+			Need: r.FamiliarFreeOrders,
+			Free: free,
 		}
 	}
 
@@ -228,7 +271,7 @@ func calcDogWalk(in Input) (Result, error) {
 		}
 	}
 
-	return Result{Total: total, Items: items}, nil
+	return Result{Total: total, Items: items, Familiar: familiar}, nil
 }
 
 // calcAccompany 按后台配置的服务项单价求和。

@@ -1,13 +1,139 @@
 <script setup lang="ts">
+import { APP_VERSION } from '@/utils/version'
+import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import TabBar from '@/components/TabBar.vue'
 import { useUserStore } from '@/store/user'
-import { ensureAuth } from '@/utils/auth'
+import { ensureAuth, requireLogin } from '@/utils/auth'
+import {
+  BASE_URL,
+  APP_ENV,
+  apiEnv,
+  setApiEnv,
+  resetApiEnv,
+  envEntryOn,
+  setEnvEntryOn,
+  clearToken,
+  clearUserId,
+} from '@/utils/request'
 
 const user = useUserStore()
 
+/** 头像地址：为空时退回昵称首字圆形占位 */
+const avatarSrc = computed(() => (user.avatar ? `${BASE_URL}${user.avatar}` : ''))
+
+/** 手机号脱敏：首页是高频曝光页面，不展示完整号码 */
+const maskedPhone = computed(() => {
+  const p = user.phone
+  if (!p) return ''
+  return p.length === 11 ? `${p.slice(0, 3)}****${p.slice(7)}` : p
+})
+
+/* ---------------- 接口环境调试入口 ----------------
+ * 默认隐藏，连点「关于我们」右侧版本号 5 次打开；打开状态存在本机，
+ * 只影响当前设备，不会同步给其他用户。用于真机连开发机、体验版切环境验证。
+ */
+const envEntry = ref(envEntryOn())
+const envInfo = ref(apiEnv())
+
+/**
+ * 「关于我们」右侧的环境标签只反映构建环境。
+ * 一旦运行期切过环境，标签就与真实请求地址不符了，此时隐藏它，
+ * 统一看下面的调试卡，避免「标签写本地、实际连生产」这种误导。
+ */
+const buildEnvTag = computed(() => {
+  if (envInfo.value.mode !== 'build') return ''
+  return APP_ENV && APP_ENV !== '生产' ? APP_ENV : ''
+})
+let verTaps = 0
+let verTapTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 连点版本号 5 次（间隔 1.2 秒内）作为隐藏开关，避免给正式用户看到调试项 */
+function onVersionTap() {
+  verTaps += 1
+  if (verTapTimer) clearTimeout(verTapTimer)
+  verTapTimer = setTimeout(() => {
+    verTaps = 0
+  }, 1200)
+  if (verTaps < 5) return
+  verTaps = 0
+  setEnvEntryOn(true)
+  envEntry.value = true
+  envInfo.value = apiEnv()
+  uni.showToast({ title: '调试入口已开启', icon: 'none' })
+}
+
+function onToggleEntry(e: Event) {
+  // switch 的 change 事件在 uni 里带 detail.value，模板类型只声明成 Event，这里取一次
+  const on = (e as unknown as { detail: { value: boolean } }).detail.value
+  setEnvEntryOn(on)
+  envEntry.value = on
+  if (!on) {
+    uni.showToast({ title: '已隐藏，连点版本号 5 次可再打开', icon: 'none' })
+  }
+}
+
+/** 真正应用环境：清掉旧环境的登录态，回首页重新走一遍登录 */
+function applyEnv(mode: 'build' | 'prod' | 'local' | 'custom', custom = '') {
+  const next = mode === 'build' ? resetApiEnv() : setApiEnv(mode, custom)
+  envInfo.value = next
+  clearToken()
+  clearUserId()
+  uni.showToast({ title: `已切到${next.label}，需重新登录`, icon: 'none' })
+  setTimeout(() => uni.reLaunch({ url: '/pages/index/index' }), 800)
+}
+
+function chooseEnv() {
+  uni.showActionSheet({
+    itemList: ['生产环境（m.yubangbzz.com）', '本地开发机（127.0.0.1:8080）', '自定义地址…', '恢复构建默认'],
+    success: ({ tapIndex }) => {
+      if (tapIndex === 0) {
+        uni.showModal({
+          title: '切到生产环境？',
+          content: '生产环境是真实数据，改动会影响线上订单与资金。仅排查问题时使用。',
+          confirmText: '仍要切换',
+          success: (r) => {
+            if (r.confirm) applyEnv('prod')
+          },
+        })
+        return
+      }
+      if (tapIndex === 1) {
+        applyEnv('local')
+        return
+      }
+      if (tapIndex === 2) {
+        // editable 需要基础库 2.17.1+；H5 不支持时 content 为空，直接忽略
+        uni.showModal({
+          title: '自定义接口地址',
+          editable: true,
+          placeholderText: '如 192.168.1.10:8080',
+          success: (r) => {
+            const v = (r.content || '').trim()
+            if (!r.confirm || !v) return
+            applyEnv('custom', v)
+          },
+        } as UniApp.ShowModalOptions)
+        return
+      }
+      applyEnv('build')
+    },
+  })
+}
+
+function goProfile() {
+  uni.navigateTo({ url: '/pages/auth/profile' })
+}
+
+function goScope() {
+  uni.navigateTo({ url: '/pages/scope/index' })
+}
+
 onShow(async () => {
+  envInfo.value = apiEnv()
   if (!ensureAuth()) return
+  // 访客态：不调需要登录态的接口，页面按未登录渲染
+  if (user.isGuest) return
   try {
     await user.ensureLogin()
     await Promise.all([user.loadAddresses(), user.loadProfile()])
@@ -17,15 +143,22 @@ onShow(async () => {
 })
 
 function goAddress() {
+  if (!requireLogin()) return
   uni.navigateTo({ url: '/pages/address/index' })
+}
+
+function goLogin() {
+  uni.navigateTo({ url: '/pages/auth/login?reason=auth' })
 }
 
 /** 设置入口放在个人信息区右上角，符合主流 App 的入口习惯 */
 function goSettings() {
+  if (!requireLogin()) return
   uni.navigateTo({ url: '/pages/settings/index' })
 }
 
 function goOrders() {
+  if (!requireLogin()) return
   uni.reLaunch({ url: '/pages/order/list' })
 }
 
@@ -65,10 +198,26 @@ function onSwitchView() {
 
 <template>
   <view class="page">
-    <!-- 个人信息：右上角进设置 -->
-    <view class="profile">
-      <view class="avatar">{{ (user.nickname || '住')[0] }}</view>
+    <!-- 访客态：不展示用户资料，直接给登录引导 -->
+    <view v-if="user.isGuest" class="profile guest-profile" @tap="goLogin">
+      <view class="avatar guest-avatar">访</view>
       <view class="profile-info">
+        <view class="name-row">
+          <text class="nickname">访客</text>
+        </view>
+        <view class="uid">登录后可预约服务、查看订单与地址</view>
+      </view>
+      <view class="gear">
+        <text class="gear-text">去登录</text>
+        <text class="gear-chev">›</text>
+      </view>
+    </view>
+
+    <!-- 个人信息：右上角进设置 -->
+    <view v-else class="profile">
+      <image v-if="avatarSrc" class="avatar" :src="avatarSrc" mode="aspectFill" @tap="goProfile" />
+      <view v-else class="avatar" @tap="goProfile">{{ (user.nickname || '住')[0] }}</view>
+      <view class="profile-info" @tap="goProfile">
         <!-- 用户名后面放身份切换：只有已认证服务方才渲染 -->
         <view class="name-row">
           <text class="nickname">{{ user.nickname || '住户' }}</text>
@@ -87,7 +236,7 @@ function onSwitchView() {
         </view>
         <view class="uid">
           ID {{ user.userId || '-' }}
-          <text v-if="user.phone" class="phone">· {{ user.phone }}</text>
+          <text v-if="maskedPhone" class="phone">· {{ maskedPhone }}</text>
         </view>
       </view>
       <view class="gear" @tap="goSettings">
@@ -146,19 +295,40 @@ function onSwitchView() {
       <view class="menu-item" @tap="goDoc('about')">
         <text>关于我们</text>
         <view class="menu-right">
-          <text class="menu-value">v1.0.0</text>
+          <!-- 连点 5 次打开接口环境调试入口，正式用户基本不会误触 -->
+          <text class="menu-value" @tap.stop="onVersionTap">v{{ APP_VERSION }}</text>
+          <text v-if="buildEnvTag" class="env-tag">{{ buildEnvTag }}</text>
           <text class="chev">›</text>
         </view>
       </view>
     </view>
 
-    <!-- 服务范围说明 -->
-    <view class="card range-note">
-      <view class="section-title">服务范围</view>
-      <view class="muted">
-        东方冠郡一期、东方冠郡二期、万科清林径、兴欣花苑、同润欣汇名邸、同润新云都会、
-        招商象屿星耀翠湾、中粮首创禧瑞祥云、丝庐雅苑一期、丝庐雅苑二期、中洲华庭、吉宝汇锦城一期。
+    <!-- 接口环境调试：默认隐藏，只影响本机；切换后清登录态回首页 -->
+    <view v-if="envEntry" class="card menu">
+      <view class="menu-item" @tap="chooseEnv">
+        <text>接口环境</text>
+        <view class="menu-right">
+          <text class="env-chip" :class="envInfo.mode">{{ envInfo.label }}</text>
+          <text class="menu-value">{{ envInfo.short }}</text>
+          <text class="chev">›</text>
+        </view>
       </view>
+      <view class="menu-item">
+        <text>显示调试入口</text>
+        <switch :checked="envEntry" color="#0f7f78" class="sw" @change="onToggleEntry" />
+      </view>
+      <view class="env-hint">
+        切换会清掉登录态并回到首页；只对本机生效，关闭后连点「关于我们」右侧版本号 5 次可重新打开。H5 预览切生产会被跨域拦截，属正常现象，真机不受影响
+      </view>
+    </view>
+
+    <!-- 服务范围：独立页面，按小区卡片展示 -->
+    <view class="card scope-entry" @tap="goScope">
+      <view class="scope-entry-main">
+        <view class="section-title">服务范围</view>
+        <view class="muted">查看已开通的小区、路段与门牌区间</view>
+      </view>
+      <text class="chev">›</text>
     </view>
 
     <TabBar current="mine" />
@@ -177,6 +347,11 @@ function onSwitchView() {
   align-items: center;
   gap: 24rpx;
   padding: 24rpx 32rpx 32rpx;
+}
+
+.guest-avatar {
+  background: #d9e2e0;
+  color: #6b7c79;
 }
 
 .avatar {
@@ -344,8 +519,59 @@ function onSwitchView() {
   color: var(--text-light);
 }
 
-.range-note {
-  line-height: 1.7;
+/* 环境标签：只在本地的构建里出现，方便一眼区分连的是哪套接口 */
+.env-tag {
+  margin-right: 8rpx;
+  padding: 2rpx 12rpx;
+  font-size: 20rpx;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999rpx;
+}
+
+/* 调试卡：环境胶囊用颜色区分，生产用警示色，避免误以为自己还在本地 */
+.env-chip {
+  padding: 2rpx 14rpx;
+  font-size: 20rpx;
+  border-radius: 999rpx;
+  color: var(--text-sub);
+  background: #f1f4f3;
+}
+
+.env-chip.prod {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.env-chip.local {
+  color: #0f7f78;
+  background: #e7f5f3;
+}
+
+.env-hint {
+  padding: 4rpx 0 24rpx;
+  font-size: 21rpx;
+  line-height: 1.5;
+  color: var(--text-light);
+}
+
+.sw {
+  transform: scale(0.8);
+  transform-origin: right center;
+}
+
+/* 服务范围入口卡：整卡可点，右侧箭头提示可进入 */
+.scope-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.scope-entry-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
 }
 
 

@@ -1,0 +1,47 @@
+[Unit]
+Description=邻有回应 API
+Documentation=https://github.com/alinger/community-handyman
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=handyman
+Group=handyman
+
+# 二进制与配置文件所在目录。uploads 落在这里（storage.local_dir 用绝对路径也可以）
+WorkingDirectory=/opt/community-handyman
+# 迁移需要 -cmd 参数，且 migrations 目录必须随二进制一起上传（默认按工作目录查找）
+ExecStartPre=/opt/community-handyman/bin/migrate -config /opt/community-handyman/configs/config.prod.yaml -cmd up
+ExecStart=/opt/community-handyman/bin/api -config /opt/community-handyman/configs/config.prod.yaml
+
+# 环境变量从单独文件读：chmod 600，属主 handyman，不要写进 unit 里
+EnvironmentFile=/etc/community-handyman/prod.env
+Environment=TZ=Asia/Shanghai
+
+Restart=always
+RestartSec=3
+# 连续 5 次 10 秒内崩掉就停止重试，避免疯狂重启刷日志
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# 优雅退出：程序自己处理 SIGTERM，给足时间把在途请求处理完
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+# ---- 安全加固 ----
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# 只放开业务需要的可写目录
+ReadWritePaths=/var/lib/community-handyman
+ReadWritePaths=/opt/community-handyman/uploads
+
+# 日志走 journald：journalctl -u community-handyman -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=community-handyman
+
+[Install]
+WantedBy=multi-user.target

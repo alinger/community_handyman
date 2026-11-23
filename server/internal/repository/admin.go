@@ -111,17 +111,6 @@ func (r *OrderRepo) ListAllOrders(ctx context.Context, status, serviceType, keyw
 	return list, total, err
 }
 
-// AssignProvider 派单或改派。
-func (r *OrderRepo) AssignProvider(ctx context.Context, orderID uint64, providerID uint64) (bool, error) {
-	res := r.db.WithContext(ctx).Model(&model.Order{}).
-		Where("id = ? AND status = ?", orderID, model.OrderPendingAccept).
-		Updates(map[string]any{"provider_id": providerID, "updated_at": time.Now()})
-	if res.Error != nil {
-		return false, res.Error
-	}
-	return res.RowsAffected > 0, nil
-}
-
 // ListRefundsByOrder 查询订单退款记录。
 func (r *PaymentRepo) ListRefundsByOrder(ctx context.Context, orderID uint64) ([]model.Refund, error) {
 	var list []model.Refund

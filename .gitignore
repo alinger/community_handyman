@@ -11,3 +11,6 @@ output/
 server/bin/
 server/uploads/
 server/.env
+
+# 发布包（二进制与构建产物，不入库）
+release/

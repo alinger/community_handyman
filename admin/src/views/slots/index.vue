@@ -16,7 +16,13 @@ const serviceTypes = [
   { value: 'dogwalk', label: '遛宠' },
   { value: 'accompany', label: '陪诊服务' },
 ]
-const slotCodes = ['08-10', '10-12', '12-14', '14-16', '16-18', '18-20']
+// 全天 12 个两小时时段：用户端可选时段直接读这里的配置，
+// 铺满全天即可让住户任选任意时间段；total=0 表示该时段不开放
+const slotCodes = [
+  '00-02', '02-04', '04-06', '06-08',
+  '08-10', '10-12', '12-14', '14-16',
+  '16-18', '18-20', '20-22', '22-24',
+]
 
 const label = (t: string) => serviceTypes.find((x) => x.value === t)?.label || t
 
@@ -129,7 +135,10 @@ async function doCopy() {
         </el-button>
       </div>
     </div>
-    <div class="note">每格是该服务在该时段的可接单总量（total=0 表示不开放）。「已用」为实时占用，修改总量不会清除已用。</div>
+    <div class="note">
+      每格是该服务在该时段的可接单总量（total=0 表示不开放）。「已用」为实时占用，修改总量不会清除已用。
+      住户端可选时段即本页配置：时段铺满全天（total &gt; 0）即可让住户任选任意时间段。
+    </div>
 
     <el-table :data="serviceTypes" v-loading="loading" border style="width: 100%">
       <el-table-column label="服务类型" width="150">
@@ -143,7 +152,7 @@ async function doCopy() {
             :max="200"
             controls-position="right"
             size="small"
-            style="width: 100px"
+            style="width: 84px"
           />
           <div class="used">
             已用 {{ rows.find((r) => r.service_type === row.value && r.slot_code === code)?.used || 0 }}

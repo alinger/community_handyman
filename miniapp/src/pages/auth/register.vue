@@ -69,6 +69,10 @@ function goLogin() {
   else uni.reLaunch({ url: '/pages/auth/login' })
 }
 
+function goForgot() {
+  uni.navigateTo({ url: '/pages/auth/forgot' })
+}
+
 function goDoc(type: 'terms' | 'privacy') {
   uni.navigateTo({ url: `/pages/doc/index?type=${type}` })
 }
@@ -155,6 +159,8 @@ function goDoc(type: 'terms' | 'privacy') {
       <view class="switch-row">
         <text class="switch-text">已有账号？</text>
         <text class="switch-link" @tap="goLogin">去登录</text>
+        <text class="divider">·</text>
+        <text class="switch-link" @tap="goForgot">忘记密码</text>
       </view>
     </view>
 
@@ -298,6 +304,11 @@ function goDoc(type: 'terms' | 'privacy') {
 .switch-link {
   color: var(--brand-dark);
   font-weight: 600;
+}
+
+.divider {
+  padding: 0 12rpx;
+  color: #cfd8d6;
 }
 
 .foot-note {

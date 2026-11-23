@@ -287,7 +287,7 @@ func (a *API) AdminListProviders(c *gin.Context) {
 
 // AdminAssign 派单或改派。
 // @Summary      派单或改派
-// @Description  仅待接单的订单可派
+// @Description  服务开始前（待接单 / 已受理 / 待上门）可派单或改派；派单即刻生效，订单进入「已受理」
 // @Tags         运营后台
 // @Accept       json
 // @Produce      json

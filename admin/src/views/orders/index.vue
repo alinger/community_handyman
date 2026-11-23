@@ -242,13 +242,19 @@ async function doQuote() {
 const ADMIN_CANCELABLE = ['pending_payment', 'pending_accept', 'accepted', 'on_the_way']
 const adminCancelable = (s: string) => ADMIN_CANCELABLE.includes(s)
 
+// ---- 派单 / 改派 ----
+// 口径与后端 assignableStatuses 一致：服务一旦开始就不能换人，
+// 否则服务记录、收入归属和责任划分都会跟着错位。
+const ASSIGNABLE = ['pending_accept', 'accepted', 'on_the_way']
+const assignable = (s: string) => ASSIGNABLE.includes(s)
+
 /**
  * 该行有几个次要操作。为 0 时不渲染「更多」，
  * 避免出现一个点开空白菜单的按钮。
  */
 function moreCount(row: Order): number {
   let n = 0
-  if (row.status === 'pending_accept') n++ // 派单
+  if (assignable(row.status)) n++ // 派单 / 改派
   if (adminCancelable(row.status)) n += 2 // 改期、代客取消
   if (row.plan === 'monthly' && row.status !== 'canceled') n++ // 核销
   if (row.status === 'pending_accept' && row.total_amount === 0) n++ // 历史报价
@@ -398,7 +404,8 @@ async function onExport() {
       <el-table-column label="服务时间" width="96">
         <template #default="{ row }">
           <div class="nowrap">{{ row.service_date }}</div>
-          <div class="slot-text">{{ row.slot_code }}</div>
+          <!-- 包月选了备选时间则备选生效，取代默认时段 -->
+          <div class="slot-text">{{ row.extra_slot_code || row.slot_code }}</div>
         </template>
       </el-table-column>
       <el-table-column label="下单用户" width="84" show-overflow-tooltip>
@@ -428,7 +435,9 @@ async function onExport() {
             <el-button link type="primary">更多</el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item v-if="row.status === 'pending_accept'" @click="openAssign(row)">派单</el-dropdown-item>
+                <el-dropdown-item v-if="assignable(row.status)" @click="openAssign(row)">
+                  {{ row.status === 'pending_accept' ? '派单' : '改派' }}
+                </el-dropdown-item>
                 <el-dropdown-item v-if="adminCancelable(row.status)" @click="openReschedule(row)">改期</el-dropdown-item>
                 <el-dropdown-item v-if="adminCancelable(row.status)" @click="openCancel(row)">代客取消</el-dropdown-item>
                 <el-dropdown-item v-if="row.plan === 'monthly' && row.status !== 'canceled'" @click="openRedeem(row)">核销</el-dropdown-item>
@@ -464,7 +473,9 @@ async function onExport() {
             <span v-if="(detail.pet_count || 0) > 0">（{{ detail.pet_count }} 只宠物）</span>
           </el-descriptions-item>
           <el-descriptions-item label="状态">{{ detail.status_label }}</el-descriptions-item>
-          <el-descriptions-item label="服务时间">{{ detail.service_date }} {{ detail.slot_code }}</el-descriptions-item>
+          <el-descriptions-item label="服务时间">
+            {{ detail.service_date }} {{ detail.extra_slot_code || detail.slot_code }}
+          </el-descriptions-item>
           <el-descriptions-item label="金额">
             {{ money(detail.total_amount) }}
             <span v-if="(detail.refunded_amount || 0) > 0" class="refund-hint">（已退 {{ money(detail.refunded_amount || 0) }}）</span>

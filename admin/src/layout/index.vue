@@ -71,8 +71,8 @@ async function onLogout() {
   <el-container class="layout">
     <el-aside width="220px" class="aside">
       <div class="logo">
-        <span class="logo-mark">助</span>
-        <span>社区好帮手<small>运营后台</small></span>
+        <img class="logo-mark" src="@/assets/logo-mark.png" alt="邻有回应" />
+        <span>邻有回应<small>运营后台</small></span>
       </div>
       <el-menu
         :default-active="active"
@@ -134,14 +134,12 @@ async function onLogout() {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 .logo-mark {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 8px;
-  background: #87c9bd;
-  color: #0c4a47;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-shrink: 0;
+  /* 新 logo 是浅底圆角方块（24% 圆角已烘进图里），深色侧边栏上直接贴合 */
+  object-fit: contain;
 }
 .logo small { display: block; font-size: 11px; font-weight: 400; opacity: 0.7; }
 .el-menu { border-right: none; }

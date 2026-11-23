@@ -1,6 +1,13 @@
 {
   "pages": [
     {
+      "path": "pages/index/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "邻有回应"
+      }
+    },
+    {
       "path": "pages/auth/login",
       "style": {
         "navigationStyle": "custom",
@@ -14,10 +21,15 @@
       }
     },
     {
-      "path": "pages/index/index",
+      "path": "pages/auth/forgot",
       "style": {
-        "navigationStyle": "custom",
-        "navigationBarTitleText": "小区好帮手"
+        "navigationBarTitleText": "找回密码"
+      }
+    },
+    {
+      "path": "pages/auth/profile",
+      "style": {
+        "navigationBarTitleText": "完善资料"
       }
     },
     {
@@ -75,6 +87,12 @@
       }
     },
     {
+      "path": "pages/scope/index",
+      "style": {
+        "navigationBarTitleText": "服务范围"
+      }
+    },
+    {
       "path": "pages/address/index",
       "style": {
         "navigationBarTitleText": "地址管理"
@@ -83,7 +101,7 @@
   ],
   "globalStyle": {
     "navigationBarTextStyle": "black",
-    "navigationBarTitleText": "小区好帮手",
+    "navigationBarTitleText": "邻有回应",
     "navigationBarBackgroundColor": "#FFFFFF",
     "backgroundColor": "#F5F7FA"
   }

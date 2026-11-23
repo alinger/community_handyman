@@ -42,8 +42,131 @@ export class ApiError extends Error {
 // uni/vite 在编译期把 process.env.UNI_PLATFORM 替换成常量，这里仅补类型声明（项目未引入 @types/node）
 declare const process: { env: Record<string, string | undefined> }
 const isH5 = process.env.UNI_PLATFORM === 'h5'
-export const BASE_URL =
-  (import.meta.env.VITE_API_BASE as string) || (isH5 ? '' : 'http://127.0.0.1:8080')
+
+/** 构建环境标识（本地 / 生产），仅用于界面提示与排查，不参与业务逻辑 */
+export const APP_ENV = (import.meta.env.VITE_APP_ENV as string | undefined)?.trim() || ''
+
+/**
+ * 接口根地址，由构建模式决定（见 .env.development / .env.production）：
+ *   VITE_API_BASE 有值 → 用它（生产固定 https://m.yubangbzz.com）
+ *   VITE_API_BASE 为空 → H5 留空走同源 proxy（免跨域）；小程序回落到本机 8080
+ * 临时连测试服：VITE_API_BASE=https://test.xxx.com npm run build:mp-weixin
+ */
+// const BUILD_BASE = (import.meta.env.VITE_API_BASE as string) || (isH5 ? 'http://127.0.0.1:8080' : 'https://m.yubangbzz.com')
+const BUILD_BASE = (import.meta.env.VITE_API_BASE as string) || (isH5 ? '' : 'http://127.0.0.1:8080')
+
+/** 构建期的环境名（本地 / 生产），自定义构建可能为空 */
+const BUILD_ENV_NAME = APP_ENV || '构建默认'
+
+/**
+ * 接口根地址。用 `export let` 而不是 const：运行期允许在「我的 → 接口环境」里临时覆盖
+ * （真机连开发机、体验版切测试服），所有请求与资源拼址都读这个变量。
+ * 注意：ESM 的 import 是活绑定，页面里 `${BASE_URL}xxx` 在切换后重新渲染就能拿到新值。
+ */
+export let BASE_URL = BUILD_BASE
+
+/** 可选环境：build=跟随构建（默认）；prod/local=固定预设；custom=手填地址 */
+export type ApiEnvMode = 'build' | 'prod' | 'local' | 'custom'
+
+const KEY_API_ENV = 'ch_api_env'
+const KEY_ENV_ENTRY = 'ch_env_entry'
+
+/** 生产与本地预设。生产写死域名，避免手抖把正式包指到测试服 */
+const PROD_BASE = 'https://m.yubangbzz.com'
+const LOCAL_BASE = 'http://127.0.0.1:8080'
+
+const ENV_MODES: ApiEnvMode[] = ['build', 'prod', 'local', 'custom']
+
+/** 用户可能只填了 IP:PORT，补上协议；末尾斜杠去掉，避免拼出 //api */
+function normalizeBase(raw: string): string {
+  const s = (raw || '').trim().replace(/\/+$/, '')
+  if (!s) return ''
+  return /^https?:\/\//i.test(s) ? s : `http://${s}`
+}
+
+function readEnvStore(): { mode: ApiEnvMode; custom: string } {
+  const raw = uni.getStorageSync(KEY_API_ENV) as string
+  if (!raw) return { mode: 'build', custom: '' }
+  try {
+    const o = JSON.parse(raw) as { mode?: string; custom?: string }
+    const mode = (o.mode || 'build') as ApiEnvMode
+    return {
+      mode: ENV_MODES.includes(mode) ? mode : 'build',
+      custom: normalizeBase(o.custom || ''),
+    }
+  } catch {
+    // 存储被写坏时退回构建默认，不让调试开关把 App 卡死
+    return { mode: 'build', custom: '' }
+  }
+}
+
+function baseOf(st: { mode: ApiEnvMode; custom: string }): string {
+  if (st.mode === 'prod') return PROD_BASE
+  if (st.mode === 'local') return LOCAL_BASE
+  if (st.mode === 'custom') return st.custom || BUILD_BASE
+  return BUILD_BASE
+}
+
+/** 启动即应用上次选的环境，保证首屏请求就走对地址 */
+function applyStoredEnv() {
+  const st = readEnvStore()
+  if (st.mode !== 'build') BASE_URL = baseOf(st)
+}
+applyStoredEnv()
+
+export interface ApiEnvInfo {
+  mode: ApiEnvMode
+  /** 实际请求根地址；空串表示 H5 同源（走 vite proxy） */
+  base: string
+  /** 用于界面展示的短名：生产 / 本地 / 自定义 / 构建默认 */
+  label: string
+  /** 展示用的地址：去协议，空地址显示「同源 /api」 */
+  short: string
+}
+
+/** 当前生效的环境（每次都从存储读，切完立刻准确） */
+export function apiEnv(): ApiEnvInfo {
+  const st = readEnvStore()
+  const base = baseOf(st)
+  const label =
+    st.mode === 'prod'
+      ? '生产'
+      : st.mode === 'local'
+        ? '本地'
+        : st.mode === 'custom'
+          ? '自定义'
+          : BUILD_ENV_NAME
+  return { mode: st.mode, base, label, short: base ? base.replace(/^https?:\/\//i, '') : '同源 /api' }
+}
+
+/** 切换环境：写存储 + 立刻改运行时地址（不重启进程，但已加载的页面数据不会自动刷新） */
+export function setApiEnv(mode: ApiEnvMode, custom = ''): ApiEnvInfo {
+  const st = { mode, custom: normalizeBase(custom) }
+  uni.setStorageSync(KEY_API_ENV, JSON.stringify(st))
+  BASE_URL = baseOf(st)
+  return apiEnv()
+}
+
+/** 恢复成构建时决定的环境 */
+export function resetApiEnv(): ApiEnvInfo {
+  uni.removeStorageSync(KEY_API_ENV)
+  BASE_URL = BUILD_BASE
+  return apiEnv()
+}
+
+/** 调试入口是否显示（默认关闭，连点版本号 5 次打开，只影响本机） */
+export function envEntryOn(): boolean {
+  return uni.getStorageSync(KEY_ENV_ENTRY) === '1'
+}
+
+export function setEnvEntryOn(on: boolean) {
+  if (on) uni.setStorageSync(KEY_ENV_ENTRY, '1')
+  else uni.removeStorageSync(KEY_ENV_ENTRY)
+}
+
+/** 生产域名，供「切到生产」时做二次确认文案 */
+export const PROD_API_BASE = PROD_BASE
+
 
 const KEY_USER_ID = 'ch_user_id'
 const KEY_TOKEN = 'ch_token'
@@ -154,7 +277,20 @@ export function request<T>(opts: RequestOptions): Promise<T> {
         resolve(body.data as T)
       },
       fail: (err) => {
-        reject(new ApiError(-1, err.errMsg?.includes('timeout') ? '网络超时，请重试' : '网络异常，请检查网络'))
+        const msg = err.errMsg || ''
+        // 只抛统一文案会把真实原因吞掉：域名白名单、连接被拒、超时在调用方看来一模一样。
+        // 控制台留一份原始 errMsg + 实际地址，排查时不用再猜。
+        console.warn('[request] fail', BASE_URL + url, msg)
+        if (msg.includes('timeout')) {
+          reject(new ApiError(-1, '网络超时，请重试'))
+          return
+        }
+        // 开发者工具没勾「不校验合法域名」时的典型报错，和真连不上要区分开
+        if (msg.includes('domain list') || msg.includes('not in domain')) {
+          reject(new ApiError(-1, '接口域名未加入白名单，请在开发者工具勾选「不校验合法域名」'))
+          return
+        }
+        reject(new ApiError(-1, '网络异常，请检查网络'))
       },
       complete: () => {
         if (loading) uni.hideLoading()

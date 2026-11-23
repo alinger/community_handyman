@@ -61,8 +61,18 @@ func (s *UserService) GetByID(ctx context.Context, userID uint64) (*model.User, 
 	return u, nil
 }
 
-// UpdateProfile 更新个人资料（昵称、手机号），返回更新后的用户。
-func (s *UserService) UpdateProfile(ctx context.Context, userID uint64, nickname, phone string) (*model.User, error) {
+// UpdateProfile 更新个人资料（昵称、手机号、头像），返回更新后的用户。
+// avatar 留空表示不改动头像（头像只能由头像上传接口写入，避免前端传任意 URL）。
+func (s *UserService) UpdateProfile(ctx context.Context, userID uint64, nickname, phone, avatar string) (*model.User, error) {
+	if avatar != "" {
+		if err := s.users.UpdateWechatProfile(ctx, userID, nickname, avatar); err != nil {
+			return nil, errs.Wrap(errs.CodeInternal, err)
+		}
+		if err := s.users.UpdatePhone(ctx, userID, phone); err != nil {
+			return nil, errs.Wrap(errs.CodeInternal, err)
+		}
+		return s.GetByID(ctx, userID)
+	}
 	if err := s.users.UpdateProfile(ctx, userID, nickname, phone); err != nil {
 		return nil, errs.Wrap(errs.CodeInternal, err)
 	}

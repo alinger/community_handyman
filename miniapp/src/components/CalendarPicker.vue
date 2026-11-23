@@ -4,16 +4,19 @@
  *
  * 可选范围与后端库存对齐（今天起 7 天）：库存表只灌了 7 天，
  * 日历上也只放这 7 天可选，避免用户选了约不上的日期。
- * 遛宠在工作日只开晚间，时段列表随日期动态变化。
+ * 时段列表直接读后台「时段库存」配置：时段铺满全天，用户就能任选任意时间段；
+ * 当日未配置时回落到内置三段。
  */
 import { computed, ref, watch } from 'vue'
 import { slotAvailability, type SlotAvailability } from '@/api'
-import { SLOTS } from '@/utils/format'
+import { SLOTS, slotTextOf } from '@/utils/format'
 
 const props = defineProps<{
   visible: boolean
   date: string
   slot: string
+  /** 只选日期，不选时段（包月订单用：时段由后端固定为默认取件时间） */
+  dateOnly?: boolean
   serviceType: string
 }>()
 
@@ -131,14 +134,6 @@ function pickDay(day: number) {
   pickedDate.value = dateOf(day)
 }
 
-/** 当前选中日可约的时段 */
-const daySlots = computed(() => {
-  if (props.serviceType !== 'dogwalk') return SLOTS
-  const d = new Date(pickedDate.value.replace(/-/g, '/'))
-  const weekday = d.getDay() >= 1 && d.getDay() <= 5
-  return weekday ? SLOTS.filter((s) => s.code === '18-20') : SLOTS
-})
-
 /**
  * 时段余量：只查当前选中日，满员时段置灰。
  * 后端未配该日库存时返回空数组，此情况下按全部可约处理（与后端下单兜底一致）。
@@ -180,7 +175,17 @@ function slotTip(code: string): string {
   return ''
 }
 
-// 换日期后原时段可能不可约或已满，自动落到第一个既开放又有余量的时段
+/**
+ * 当前选中日可选时段：直接取后台「时段库存」的时段代码（含 total=0 的，置灰展示），
+ * 后台把时段铺满全天，用户即可任选任意时间段；未配置的日期回落内置三段。
+ */
+const daySlots = computed(() => {
+  const codes = Object.keys(avail.value).sort()
+  if (codes.length) return codes.map((code) => ({ code, label: slotTextOf(code) }))
+  return SLOTS
+})
+
+// 换日期或库存加载后，原时段可能不可约或已满，自动落到第一个既开放又有余量的时段
 watch([daySlots, avail], () => {
   const usable = daySlots.value.filter((s) => !slotFull(s.code))
   if (!usable.some((s) => s.code === pickedSlot.value)) {
@@ -241,11 +246,12 @@ function confirm() {
         </view>
       </view>
 
-      <view class="divider" />
+      <view v-if="!dateOnly" class="divider" />
 
-      <!-- 时段 -->
-      <view class="slot-title">可选时段</view>
-      <view class="slot-grid">
+      <!-- 时段（包月只看日期，时段固定为默认取件时间，由后端落单）。
+           时段列表来自后台「时段库存」配置，铺满全天即可让用户任选任意时间段 -->
+      <view v-if="!dateOnly" class="slot-title">可选时段</view>
+      <view v-if="!dateOnly" class="slot-grid">
         <view
           v-for="s in daySlots"
           :key="s.code"
@@ -257,10 +263,7 @@ function confirm() {
           <text v-if="slotTip(s.code)" class="chip-tip">{{ slotTip(s.code) }}</text>
         </view>
       </view>
-      <view v-if="serviceType === 'dogwalk'" class="slot-hint">
-        遛宠工作日仅开放晚间时段，周末全天可约
-      </view>
-      <view v-else-if="daySlots.every((s) => slotFull(s.code))" class="slot-hint">
+      <view v-if="!dateOnly && daySlots.length && daySlots.every((s) => slotFull(s.code))" class="slot-hint">
         当日时段已约满，请换一天
       </view>
 

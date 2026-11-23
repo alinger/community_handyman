@@ -460,7 +460,7 @@ const docTemplate = `{
                         "AdminToken": []
                     }
                 ],
-                "description": "仅待接单的订单可派",
+                "description": "服务开始前（待接单 / 已受理 / 待上门）可派单或改派；派单即刻生效，订单进入「已受理」",
                 "consumes": [
                     "application/json"
                 ],
@@ -832,6 +832,219 @@ const docTemplate = `{
                         "description": "每页条数",
                         "name": "size",
                         "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/provider-applications": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方审核"
+                ],
+                "summary": "服务方申请列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "pending/approved/rejected，空为全部",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页条数",
+                        "name": "size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/provider-applications/stats": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方审核"
+                ],
+                "summary": "服务方申请统计",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/provider-applications/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方审核"
+                ],
+                "summary": "服务方申请详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "申请 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/provider-applications/{id}/approve": {
+            "post": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "description": "同事务内把用户 role 置为 provider；非 pending 状态返回 2003",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方审核"
+                ],
+                "summary": "通过服务方认证",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "申请 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin/provider-applications/{id}/cert/{kind}": {
+            "get": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "服务方审核"
+                ],
+                "summary": "查看申请附件",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "申请 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "front / back / health",
+                        "name": "kind",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/api/admin/provider-applications/{id}/reject": {
+            "post": {
+                "security": [
+                    {
+                        "AdminToken": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方审核"
+                ],
+                "summary": "驳回服务方认证",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "申请 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "note：驳回原因",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
                     }
                 ],
                 "responses": {
@@ -1497,17 +1710,19 @@ const docTemplate = `{
                         "UserID": []
                     }
                 ],
-                "description": "新增地址时小区只能从这份后台配置列表中选择，不能自由输入",
+                "description": "新增地址时小区只能从这份后台配置列表中选择，不能自由输入\n价格、天数、默认取件时段与可选额外时段；数据来自 SKU 规则，改配置不用发版",
                 "produces": [
+                    "application/json",
                     "application/json"
                 ],
                 "tags": [
-                    "地址"
+                    "地址",
+                    "服务"
                 ],
-                "summary": "可选小区列表",
+                "summary": "包月方案",
                 "responses": {
                     "200": {
-                        "description": "业务错误，见 code",
+                        "description": "data 为 dto.GarbagePlanResp",
                         "schema": {
                             "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
                         }
@@ -1559,6 +1774,38 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "只能删除本人地址；删除默认地址时自动把剩余最新一条提升为默认，返回删除后的地址列表",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "地址"
+                ],
+                "summary": "删除地址",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "地址 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "1004 地址不存在",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
             }
         },
         "/api/v1/addresses/{id}/default": {
@@ -1595,6 +1842,327 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/auth/login": {
+            "post": {
+                "description": "手机号 + 密码登录，返回 token 与用户信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "用户登录",
+                "parameters": [
+                    {
+                        "description": "手机号与密码",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.UserLoginReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "1002 手机号或密码错误",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/password": {
+            "put": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "校验旧密码后更新，旧密码错误返回 1001",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "修改密码",
+                "parameters": [
+                    {
+                        "description": "旧密码与新密码",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.ChangePasswordReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/password/reset": {
+            "post": {
+                "description": "校验 scene=reset 的验证码后重设密码，用于用户忘记密码。验证码一次性消费。\n成功后直接返回登录态（与密码登录结构一致），前端无需再登一次。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "重置密码（短信验证码）",
+                "parameters": [
+                    {
+                        "description": "手机号、验证码、新密码",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.SmsResetPasswordReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "3004 验证码错误或已失效 / 1001 新密码不合规",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/phone": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "微信登录后补手机号；该号码已被其他账号占用时返回 1005，不做自动合并。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "绑定手机号",
+                "parameters": [
+                    {
+                        "description": "手机号与验证码",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.BindPhoneReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "1005 号码已被占用",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/register": {
+            "post": {
+                "description": "手机号 + 密码注册，成功后直接返回登录 token，无需再次登录",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "用户注册",
+                "parameters": [
+                    {
+                        "description": "手机号、密码、昵称（昵称可空）",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.RegisterReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "1005 手机号已注册 / 1001 参数校验失败",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/sms/code": {
+            "post": {
+                "description": "通过阿里云短信下发 6 位验证码。同号同用途 60 秒一次、每日 10 条；验证码 5 分钟有效。\nscene=login 用于登录/注册，scene=reset 用于重置密码（仅已注册手机号）。\n响应只含 expires_in（有效期秒）与 interval（重发间隔秒），不返回验证码本身。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "发送短信验证码",
+                "parameters": [
+                    {
+                        "description": "手机号与用途",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.SendSmsCodeReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "1001 参数错误或发送过频 / 3003 短信通道失败",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/sms/login": {
+            "post": {
+                "description": "校验验证码；手机号未注册时自动创建账号（昵称可空，默认「住户」）。返回结构与密码登录一致。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "验证码登录/注册",
+                "parameters": [
+                    {
+                        "description": "手机号、验证码、昵称（可选）",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.SmsLoginReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "3004 验证码错误或已失效 / 1003 账号已封禁",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/wechat": {
+            "post": {
+                "description": "前端调 wx.login 拿 code，后端用 code 换 openid。openid 不存在时自动建号。\n响应中的 need_bind_phone 为真表示账号还没手机号，前端应引导绑定（不阻断浏览）。\ndev 环境未配置 AppID/AppSecret 时，code 会被直接当作 openid 使用，便于本地联调。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "微信授权登录",
+                "parameters": [
+                    {
+                        "description": "微信 code",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.WechatLoginReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "1002 微信登录失效 / 1003 账号已封禁",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/wechat/phone": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "前端 button open-type=\"getPhoneNumber\" 拿到 code，后端用 access_token 换手机号并绑定。\ncode 5 分钟内有效且只能消费一次；号码已被其他账号占用时返回 1005，不做自动合并。\n该能力仅对非个人主体且已认证的小程序开放，未开通时前端应引导使用短信验证码绑定。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "微信授权手机号",
+                "parameters": [
+                    {
+                        "description": "手机号授权 code",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.WechatPhoneReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "1002 授权失效 / 1005 号码已被占用",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/dev/login": {
             "post": {
                 "description": "按 openid 取或建用户，仅在 env=dev 时注册该路由",
@@ -1622,6 +2190,130 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "data 含 user_id",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/me": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "设置页展示昵称、手机号等个人资料",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "个人信息"
+                ],
+                "summary": "当前用户信息",
+                "responses": {
+                    "200": {
+                        "description": "data 为 dto.MeResp",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "整表提交，nickname 必填、phone 可留空清除",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "个人信息"
+                ],
+                "summary": "修改个人信息",
+                "parameters": [
+                    {
+                        "description": "昵称与手机号",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.UpdateMeReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "业务错误，见 code",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/me/avatar": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "微信 chooseAvatar 回调给的是临时文件路径，前端需把它上传到这里落地。\n支持 jpg / png / webp / gif，≤5MB；成功后返回可直接用于 image 的地址。",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "个人信息"
+                ],
+                "summary": "上传头像",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "头像文件",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "1001 文件类型或大小不合规",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/me/quotas": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "注册赠送的免费倒垃圾次数；remaining 为 0 时前端应引导购买包月",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "个人信息"
+                ],
+                "summary": "免费次数余额",
+                "responses": {
+                    "200": {
+                        "description": "data 为 []dto.QuotaResp",
                         "schema": {
                             "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
                         }
@@ -2050,6 +2742,18 @@ const docTemplate = `{
                         "in": "formData"
                     },
                     {
+                        "type": "boolean",
+                        "description": "是否已征得主人同意拍摄（默认 false）",
+                        "name": "owner_consented",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "凭证阶段：start 开始服务 / finish 完成服务 / 空为过程记录",
+                        "name": "stage",
+                        "in": "formData"
+                    },
+                    {
                         "type": "file",
                         "description": "文件",
                         "name": "file",
@@ -2113,6 +2817,255 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "无权访问",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/orders/{orderNo}/reschedule": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "待支付/待接单/已接单可改；自动换时段库存并通知已接单的服务方",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "订单"
+                ],
+                "summary": "修改服务时间",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "新日期与新时段",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.RescheduleReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "2002 时段已满 / 2003 状态不允许",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/orders/{orderNo}/reschedule/respond": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "同意则立即换时段库存并改期，拒绝则保留原时间",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "订单"
+                ],
+                "summary": "处理改期申请",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "是否同意",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.RespondRescheduleReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data 为 dto.RescheduleInfo",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/provider/application": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "data 为 null 表示从未申请；否则返回申请内容与审核结果",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方认证"
+                ],
+                "summary": "我的服务方认证状态",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "驳回后可修改重提；待审核与已通过状态不允许重复提交",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方认证"
+                ],
+                "summary": "提交服务方认证申请",
+                "parameters": [
+                    {
+                        "description": "real_name/phone/service_type/experience/id_card_no/附件 key",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/provider/application/cert": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "仅支持 jpg/png/webp 且 ≤8MB；返回的 key 在提交申请时回传",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方认证"
+                ],
+                "summary": "上传认证附件",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "front / back / health",
+                        "name": "kind",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "file",
+                        "description": "图片",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data.key 为附件 key",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/provider/application/cert/{kind}": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "produces": [
+                    "application/octet-stream"
+                ],
+                "tags": [
+                    "服务方认证"
+                ],
+                "summary": "查看认证附件",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "front / back / health",
+                        "name": "kind",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/api/v1/provider/income": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "已完成订单自动入账后的累计金额与最近明细",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方"
+                ],
+                "summary": "我的收入",
+                "responses": {
+                    "200": {
+                        "description": "data 为 dto.ProviderIncomeResp",
                         "schema": {
                             "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
                         }
@@ -2289,6 +3242,74 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/provider/orders/{orderNo}/monthly/finish": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "打卡之后才能点；同一天重复完成返回 2003，未打卡返回 2003",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方"
+                ],
+                "summary": "月卡本趟完成",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data 为 dto.MonthlyProgress",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/provider/orders/{orderNo}/monthly/redeem": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "包月代倒垃圾按天核销；同一天重复打卡返回 2003，不在服务期内返回 1001",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方"
+                ],
+                "summary": "月卡今日打卡",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data 为 dto.MonthlyProgress",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/provider/orders/{orderNo}/reject": {
             "post": {
                 "security": [
@@ -2333,6 +3354,105 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/provider/orders/{orderNo}/reschedule": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "仅已受理订单可申请；提交后等住户确认，确认前仍按原时间服务",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方"
+                ],
+                "summary": "申请改期",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "新日期与新时段",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_internal_dto.RescheduleReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "2003 状态不允许或有待确认申请",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/provider/orders/{orderNo}/reschedule/ack": {
+            "post": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务方"
+                ],
+                "summary": "确认知悉住户改期",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "订单号",
+                        "name": "orderNo",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/service-areas": {
+            "get": {
+                "description": "按小区聚合的路段与门牌区间，供「服务范围」页展示；无需登录，访客也能看。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "地址"
+                ],
+                "summary": "服务范围",
+                "responses": {
+                    "200": {
+                        "description": "业务错误，见 code",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/services/accompany/options": {
             "get": {
                 "security": [
@@ -2351,6 +3471,116 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "data 为 pricing.AccompanyOptions",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/services/garbage-plan": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "新增地址时小区只能从这份后台配置列表中选择，不能自由输入\n价格、天数、默认取件时段与可选额外时段；数据来自 SKU 规则，改配置不用发版",
+                "produces": [
+                    "application/json",
+                    "application/json"
+                ],
+                "tags": [
+                    "地址",
+                    "服务"
+                ],
+                "summary": "包月方案",
+                "responses": {
+                    "200": {
+                        "description": "data 为 dto.GarbagePlanResp",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/services/slots": {
+            "get": {
+                "security": [
+                    {
+                        "UserID": []
+                    }
+                ],
+                "description": "返回指定日期与服务类型的各时段库存；后台未配置该日库存时返回空数组，前端视为全部可选",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "服务配置"
+                ],
+                "summary": "时段余量",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "服务日期 YYYY-MM-DD",
+                        "name": "date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "服务类型 garbage/dogwalk/accompany",
+                        "name": "service_type",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "data 为 dto.SlotAvailability 数组",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/users/{id}/avatar/{name}": {
+            "get": {
+                "description": "公开接口：小程序 image 标签无法携带 Authorization 头，故不鉴权。\n文件名由服务端生成且不可猜，不暴露用户目录结构。",
+                "produces": [
+                    "image/png"
+                ],
+                "tags": [
+                    "个人信息"
+                ],
+                "summary": "读取头像",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "用户 ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "文件名",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "404": {
+                        "description": "文件不存在",
                         "schema": {
                             "$ref": "#/definitions/github_com_alinger_community-handyman_server_pkg_response.Body"
                         }
@@ -2477,6 +3707,23 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_alinger_community-handyman_server_internal_dto.BindPhoneReq": {
+            "type": "object",
+            "required": [
+                "phone"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "123456"
+                },
+                "phone": {
+                    "type": "string",
+                    "maxLength": 20,
+                    "example": "13800138000"
+                }
+            }
+        },
         "github_com_alinger_community-handyman_server_internal_dto.CancelOrderReq": {
             "type": "object",
             "properties": {
@@ -2504,6 +3751,23 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 64,
                     "example": "old-password"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.ChangePasswordReq": {
+            "type": "object",
+            "required": [
+                "new_password",
+                "old_password"
+            ],
+            "properties": {
+                "new_password": {
+                    "type": "string",
+                    "maxLength": 32
+                },
+                "old_password": {
+                    "type": "string",
+                    "maxLength": 32
                 }
             }
         },
@@ -2661,6 +3925,10 @@ const docTemplate = `{
                 "slot_code"
             ],
             "properties": {
+                "access_info": {
+                    "type": "string",
+                    "maxLength": 100
+                },
                 "address_id": {
                     "type": "integer"
                 },
@@ -2673,6 +3941,22 @@ const docTemplate = `{
                     "type": "integer",
                     "maximum": 120,
                     "minimum": 0
+                },
+                "entry_method": {
+                    "description": "EntryMethod / AccessInfo 进入方式与门禁信息（选填）。\nAccessInfo 是明文入参，服务端加密后落库，任何接口都不会明文回传原始密文。",
+                    "type": "string",
+                    "enum": [
+                        "knock",
+                        "password",
+                        "card",
+                        "property",
+                        "other"
+                    ]
+                },
+                "extra_slot_code": {
+                    "description": "ExtraSlotCode 包月备选服务时间：选中后取代默认时段，每天按它上门（空表示按默认时段）",
+                    "type": "string",
+                    "maxLength": 16
                 },
                 "feed_only": {
                     "type": "boolean"
@@ -2701,6 +3985,11 @@ const docTemplate = `{
                     "type": "integer",
                     "maximum": 10,
                     "minimum": 0
+                },
+                "pet_notes": {
+                    "description": "PetNotes 宠物备注（选填）：类型、名字、情况等",
+                    "type": "string",
+                    "maxLength": 200
                 },
                 "plan": {
                     "type": "string",
@@ -2794,6 +4083,30 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_alinger_community-handyman_server_internal_dto.RegisterReq": {
+            "type": "object",
+            "required": [
+                "password",
+                "phone"
+            ],
+            "properties": {
+                "nickname": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "example": "张阿姨"
+                },
+                "password": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "example": "123456"
+                },
+                "phone": {
+                    "type": "string",
+                    "maxLength": 20,
+                    "example": "13800138000"
+                }
+            }
+        },
         "github_com_alinger_community-handyman_server_internal_dto.RejectOrderReq": {
             "type": "object",
             "properties": {
@@ -2801,6 +4114,28 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 200,
                     "example": "当天排期满"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.RescheduleReq": {
+            "type": "object",
+            "required": [
+                "service_date",
+                "slot_code"
+            ],
+            "properties": {
+                "reason": {
+                    "description": "Reason 改期原因，服务方申请时强烈建议填写，住户据此判断是否同意",
+                    "type": "string",
+                    "maxLength": 200
+                },
+                "service_date": {
+                    "description": "2006-01-02",
+                    "type": "string"
+                },
+                "slot_code": {
+                    "type": "string",
+                    "maxLength": 16
                 }
             }
         },
@@ -2815,6 +4150,40 @@ const docTemplate = `{
                     "maxLength": 64,
                     "minLength": 6,
                     "example": "new-password"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.RespondRescheduleReq": {
+            "type": "object",
+            "properties": {
+                "approve": {
+                    "type": "boolean"
+                },
+                "reason": {
+                    "description": "Reason 拒绝原因，会覆盖到改期记录里给服务方看",
+                    "type": "string",
+                    "maxLength": 200
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.SendSmsCodeReq": {
+            "type": "object",
+            "required": [
+                "phone"
+            ],
+            "properties": {
+                "phone": {
+                    "type": "string",
+                    "maxLength": 20,
+                    "example": "13800138000"
+                },
+                "scene": {
+                    "type": "string",
+                    "enum": [
+                        "login",
+                        "reset"
+                    ],
+                    "example": "login"
                 }
             }
         },
@@ -2922,6 +4291,53 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_alinger_community-handyman_server_internal_dto.SmsLoginReq": {
+            "type": "object",
+            "required": [
+                "code",
+                "phone"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "123456"
+                },
+                "nickname": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "example": "张阿姨"
+                },
+                "phone": {
+                    "type": "string",
+                    "maxLength": 20,
+                    "example": "13800138000"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.SmsResetPasswordReq": {
+            "type": "object",
+            "required": [
+                "code",
+                "new_password",
+                "phone"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "123456"
+                },
+                "new_password": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "example": "123456"
+                },
+                "phone": {
+                    "type": "string",
+                    "maxLength": 20,
+                    "example": "13800138000"
+                }
+            }
+        },
         "github_com_alinger_community-handyman_server_internal_dto.UpdateAddressReq": {
             "type": "object",
             "required": [
@@ -2993,6 +4409,30 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_alinger_community-handyman_server_internal_dto.UpdateMeReq": {
+            "type": "object",
+            "required": [
+                "nickname"
+            ],
+            "properties": {
+                "avatar": {
+                    "description": "Avatar 为头像地址（由头像上传接口返回）。留空表示不改动头像。",
+                    "type": "string",
+                    "maxLength": 512,
+                    "example": "/api/v1/users/12/avatar/1732000000.png"
+                },
+                "nickname": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "example": "张阿姨"
+                },
+                "phone": {
+                    "type": "string",
+                    "maxLength": 20,
+                    "example": "13800138000"
+                }
+            }
+        },
         "github_com_alinger_community-handyman_server_internal_dto.UpdateSkuReq": {
             "type": "object",
             "properties": {
@@ -3003,6 +4443,60 @@ const docTemplate = `{
                 },
                 "rules": {
                     "type": "object"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.UserLoginReq": {
+            "type": "object",
+            "required": [
+                "password",
+                "phone"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "example": "123456"
+                },
+                "phone": {
+                    "type": "string",
+                    "maxLength": 20,
+                    "example": "13800138000"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.WechatLoginReq": {
+            "type": "object",
+            "required": [
+                "code"
+            ],
+            "properties": {
+                "avatar": {
+                    "type": "string",
+                    "maxLength": 512
+                },
+                "code": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "example": "0a1B2c3D"
+                },
+                "nickname": {
+                    "type": "string",
+                    "maxLength": 64,
+                    "example": "张阿姨"
+                }
+            }
+        },
+        "github_com_alinger_community-handyman_server_internal_dto.WechatPhoneReq": {
+            "type": "object",
+            "required": [
+                "code"
+            ],
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "example": "0a1B2c3D"
                 }
             }
         },
@@ -3044,7 +4538,7 @@ var SwaggerInfo = &swag.Spec{
 	Host:             "",
 	BasePath:         "/",
 	Schemes:          []string{},
-	Title:            "小区好帮手 API",
+	Title:            "邻有回应 API",
 	Description:      "社区生活服务预约平台后端接口：地址范围校验、下单支付、履约、运营后台。\n用户端需 X-User-Id（接入微信登录后改为 Bearer JWT）；后台需 Bearer token。",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,

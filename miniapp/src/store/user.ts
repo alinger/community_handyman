@@ -4,7 +4,12 @@ import {
   getMe,
   listAddresses,
   login as apiLogin,
+  loginBySms as apiLoginBySms,
+  wechatLogin as apiWechatLogin,
+  bindPhone as apiBindPhone,
+  bindPhoneByWechat as apiBindPhoneByWechat,
   register as apiRegister,
+  resetPasswordBySms as apiResetPassword,
   setDefaultAddress as apiSetDefault,
   updateMe,
   type Session,
@@ -21,6 +26,8 @@ import {
 
 const KEY_ROLE = 'ch_role'
 const KEY_VIEW = 'ch_view_mode'
+/** 访客模式标记：只放行浏览，不代表登录态 */
+const KEY_GUEST = 'ch_guest_mode'
 
 /**
  * 用户与地址状态。
@@ -41,6 +48,8 @@ export const useUserStore = defineStore('user', {
     token: getToken(),
     nickname: '',
     phone: '',
+    /** 头像相对地址（服务端返回），展示时拼 BASE_URL */
+    avatar: '',
     role: (uni.getStorageSync(KEY_ROLE) as string) || 'user',
     /** 当前视角：user=住户侧，provider=服务方侧。未认证时恒为 user */
     viewMode: (uni.getStorageSync(KEY_VIEW) as string) || 'user',
@@ -48,12 +57,24 @@ export const useUserStore = defineStore('user', {
     currentAddressId: 0,
     ready: false,
     loginPromise: null as Promise<void> | null,
+    /**
+     * 访客模式：用户选择「先逛逛」时置真。
+     * 它只表示「允许停留」，不代表有身份 —— isLoggedIn 仍为 false，
+     * 所有需要 user_id 的接口都不会被调用。刷新后保留，避免每次都被弹回登录页。
+     */
+    guest: (uni.getStorageSync(KEY_GUEST) as string) === '1',
+    /** 微信登录后仍未绑定手机号，用于提示补资料 */
+    needBindPhone: false,
   }),
 
   getters: {
     /** 是否已登录：有 token 才算，光有 userId 是历史联调残留 */
     isLoggedIn(state): boolean {
       return !!state.token && !!state.userId
+    },
+    /** 是否处于访客态：未登录但被允许浏览 */
+    isGuest(state): boolean {
+      return !state.token && state.guest
     },
     /** 是否具备服务方权限（能否进服务方端） */
     isProvider(state): boolean {
@@ -105,16 +126,59 @@ export const useUserStore = defineStore('user', {
       }
     },
 
+    /** 进入访客模式：不建账号、不发 token，只放行浏览 */
+    enterGuest() {
+      this.guest = true
+      uni.setStorageSync(KEY_GUEST, '1')
+    },
+
+    /** 退出访客模式（去登录时调用），避免登录页返回又落回访客态 */
+    exitGuest() {
+      this.guest = false
+      uni.removeStorageSync(KEY_GUEST)
+    },
+
+    /**
+     * 微信一键授权登录。
+     * 小程序端 uni.login 返回的 code 交给后端换 openid；
+     * H5 没有微信环境，uni.login 会失败，由调用方提示改用其它方式。
+     */
+    async loginByWechat(profile?: { nickname?: string; avatar?: string }) {
+      const code = await new Promise<string>((resolve, reject) => {
+        uni.login({
+          provider: 'weixin',
+          success: (res) => (res.code ? resolve(res.code) : reject(new Error('未获取到微信授权码'))),
+          fail: () => reject(new Error('当前环境不支持微信授权登录')),
+        })
+      })
+      const s = await apiWechatLogin({ code, ...profile })
+      this.applySession(s)
+      this.needBindPhone = s.need_bind_phone
+      this.exitGuest()
+      return s
+    },
+
+    /** 绑定手机号，成功后刷新会话 */
+    async bindPhone(phone: string, code = '') {
+      const s = await apiBindPhone({ phone, code })
+      this.applySession(s)
+      this.needBindPhone = false
+      return s
+    },
+
     /** 应用正式登录/注册返回的会话 */
     applySession(s: Session) {
       this.token = s.token
       this.userId = String(s.user.user_id)
       this.nickname = s.user.nickname || ''
       this.phone = s.user.phone || ''
+      this.avatar = s.user.avatar || ''
       this.role = s.user.role || 'user'
       setToken(s.token)
       setUserId(s.user.user_id)
       uni.setStorageSync(KEY_ROLE, this.role)
+      this.guest = false
+      uni.removeStorageSync(KEY_GUEST)
       this.syncViewMode()
       this.ready = true
     },
@@ -135,6 +199,20 @@ export const useUserStore = defineStore('user', {
 
     async login(phone: string, password: string) {
       const s = await apiLogin({ phone, password })
+      this.applySession(s)
+      return s
+    },
+
+    /** 验证码登录；首次登录手机号时后端自动建号，与注册等价 */
+    async loginBySms(phone: string, code: string, nickname = '') {
+      const s = await apiLoginBySms({ phone, code, nickname })
+      this.applySession(s)
+      return s
+    },
+
+    /** 凭短信验证码重置密码，成功后直接落地登录态 */
+    async resetPassword(phone: string, code: string, newPassword: string) {
+      const s = await apiResetPassword({ phone, code, new_password: newPassword })
       this.applySession(s)
       return s
     },
@@ -208,6 +286,7 @@ export const useUserStore = defineStore('user', {
       const me = await getMe()
       this.nickname = me.nickname || ''
       this.phone = me.phone || ''
+      this.avatar = me.avatar || ''
       // role 以后端为准：审核通过后 token 里的角色不会变（签发时就固定了），
       // 但权限判定用的 users.role 已经更新，这里同步过来，
       // 用户刷新「我的」页就能看到服务方入口，不必重新登录。
@@ -219,12 +298,21 @@ export const useUserStore = defineStore('user', {
       return me
     },
 
-    /** 保存个人资料并同步本地状态 */
-    async saveProfile(nickname: string, phone: string) {
-      const me = await updateMe({ nickname, phone })
+    /** 保存个人资料并同步本地状态（avatar 传已上传后的地址，留空表示不改头像） */
+    async saveProfile(nickname: string, phone: string, avatar = '') {
+      const me = await updateMe({ nickname, phone, avatar })
       this.nickname = me.nickname
       this.phone = me.phone
+      if (me.avatar !== undefined) this.avatar = me.avatar || ''
       return me
+    },
+
+    /** 微信授权手机号一键绑定：成功后会话里已带手机号 */
+    async bindPhoneByWechat(code: string) {
+      const s = await apiBindPhoneByWechat({ code })
+      this.applySession(s)
+      this.needBindPhone = false
+      return s
     },
 
     /** 退出登录：清空本地会话与缓存身份，由调用方跳登录页 */
@@ -233,6 +321,7 @@ export const useUserStore = defineStore('user', {
       this.token = ''
       this.nickname = ''
       this.phone = ''
+      this.avatar = ''
       this.addresses = []
       this.currentAddressId = 0
       this.ready = false

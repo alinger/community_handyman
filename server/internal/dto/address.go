@@ -52,3 +52,19 @@ type SlotAvailability struct {
 	Remaining int  `json:"remaining"`
 	Available bool `json:"available"`
 }
+
+// ServiceAreaLane 一个小区下的一段服务范围（路段 + 门牌区间）。
+type ServiceAreaLane struct {
+	Lane string `json:"lane" example:"1 号楼"`
+	// HouseFrom / HouseTo 为门牌号区间，两者都为 0 表示不限门牌
+	HouseFrom int `json:"house_from" example:"1"`
+	HouseTo   int `json:"house_to" example:"30"`
+	// HouseParity 门牌单双：all=不限，odd=单号，even=双号
+	HouseParity string `json:"house_parity" example:"odd"`
+}
+
+// ServiceAreaScope 一个已开通小区的服务范围。
+type ServiceAreaScope struct {
+	Community string            `json:"community" example:"东方冠郡一期"`
+	Lanes     []ServiceAreaLane `json:"lanes"`
+}

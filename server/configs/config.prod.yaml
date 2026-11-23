@@ -12,8 +12,11 @@ server:
   write_timeout: 30s
   shutdown_timeout: 15s
   # 生产只放真实域名，CORS 不放通配
+  # H5_ORIGIN：用户端 H5 站点；ADMIN_ORIGIN：运营后台（后台与 API 分域直连时才需要，
+  # 同域部署可留空——中间件会忽略空值，不会放行任意来源）
   allow_origins:
     - "${H5_ORIGIN}"
+    - "${ADMIN_ORIGIN}"
 
 database:
   dsn: "${MYSQL_DSN}"
@@ -32,18 +35,29 @@ auth:
   secret: "${AUTH_SECRET}"
   token_ttl: 12h
 
+security:
+  # 门禁密码等敏感字段的加密口令。留空时退回用 AUTH_SECRET 派生，
+  # 但生产环境建议显式配置：换 AUTH_SECRET 会让历史密文全部解不开。
+  access_key: "${SECURITY_ACCESS_KEY}"
+
 payment:
   provider: "${PAYMENT_PROVIDER}"
   sandbox_secret: "${PAYMENT_SANDBOX_SECRET}"
+  # 试运行期：下单即视为已支付，不调起支付。
+  # 微信支付商户号与证书齐备后改为 false，并同时把 provider 换成 wechat。
+  skip_pay: true
 
 wechat:
   app_id: "${WECHAT_APP_ID}"
+  app_secret: "${WECHAT_APP_SECRET}"
   mch_id: "${WECHAT_MCH_ID}"
   serial_no: "${WECHAT_SERIAL_NO}"
   api_v3_key: "${WECHAT_API_V3_KEY}"
   private_key_path: "${WECHAT_PRIVATE_KEY_PATH}"
   notify_url: "${WECHAT_NOTIFY_URL}"
   refund_notify_url: "${WECHAT_REFUND_NOTIFY_URL}"
+  # 订阅消息模板 ID（小程序后台申请，订单状态通知用）；未申请可留空，只记日志
+  subscribe_template_id: "${WECHAT_SUBSCRIBE_TEMPLATE_ID}"
 
 storage:
   provider: "${STORAGE_PROVIDER}"
@@ -53,3 +67,12 @@ storage:
   bucket: "${STORAGE_BUCKET}"
   access_key: "${STORAGE_ACCESS_KEY}"
   secret_key: "${STORAGE_SECRET_KEY}"
+
+sms:
+  # 生产必须为 aliyun，缺密钥时启动即失败，避免用户收不到验证码却无人察觉
+  provider: "${SMS_PROVIDER}"
+  access_key_id: "${SMS_ACCESS_KEY_ID}"
+  access_key_secret: "${SMS_ACCESS_KEY_SECRET}"
+  sign_name: "${SMS_SIGN_NAME}"
+  template_code: "${SMS_TEMPLATE_CODE}"
+  endpoint: "${SMS_ENDPOINT}"

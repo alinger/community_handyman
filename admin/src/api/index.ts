@@ -37,8 +37,15 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * 接口地址由构建环境决定（见 admin/.env.*）：
+ *   /                     同域部署，Nginx 把 /api 反代到后端（默认，无 CORS）
+ *   https://m.yubangbzz.com  分域直连，需服务端 allow_origins 放行后台域名
+ */
+export const API_BASE = (import.meta.env.VITE_API_BASE as string) || '/'
+
 const http = axios.create({
-  baseURL: '/',
+  baseURL: API_BASE,
   timeout: 15000,
 })
 
@@ -168,6 +175,8 @@ export interface Order {
   plan: string
   service_date: string
   slot_code: string
+  /** 包月备选服务时间（选中即取代默认取件时段，展示优先于 slot_code） */
+  extra_slot_code?: string
   status: string
   status_label: string
   tab: string

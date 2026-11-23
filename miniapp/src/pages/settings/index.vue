@@ -1,19 +1,29 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { changePassword } from '@/api'
 import { useUserStore } from '@/store/user'
 import { ensureAuth } from '@/utils/auth'
-import { ApiError } from '@/utils/request'
+import { ApiError, BASE_URL } from '@/utils/request'
 
 const user = useUserStore()
 
-const saving = ref(false)
-const loaded = ref(false)
-const form = reactive({
-  nickname: '',
-  phone: '',
+/** 头像地址：服务端存的是相对路径，展示要拼 BASE_URL */
+const avatarSrc = computed(() => (user.avatar ? `${BASE_URL}${user.avatar}` : ''))
+
+/** 头像与昵称的编辑收敛到资料页（那里能用微信授权取头像昵称） */
+function goProfile() {
+  uni.navigateTo({ url: '/pages/auth/profile' })
+}
+
+/** 手机号脱敏展示：设置页只读，不提供编辑 */
+const maskedPhone = computed(() => {
+  const p = user.phone
+  if (!p) return '未绑定'
+  return p.length === 11 ? `${p.slice(0, 3)}****${p.slice(7)}` : p
 })
+
+const displayName = computed(() => user.nickname || '住户')
 
 // 修改密码弹层
 const pwdVisible = ref(false)
@@ -56,47 +66,19 @@ async function onSavePwd() {
   }
 }
 
+// 设置页只读展示个人信息，编辑一律走资料页：
+// 头像昵称要用微信授权能力取，手机号要走微信组件或短信验证，
+// 这些都不是「在设置页填个输入框」能完成的，两边都做等于维护两套逻辑。
 onShow(async () => {
   if (!ensureAuth()) return
   try {
     await user.ensureLogin()
     await user.loadProfile()
-    form.nickname = user.nickname
-    form.phone = user.phone
-    loaded.value = true
   } catch (e) {
     console.warn('[settings] 加载个人资料失败', e)
     uni.showToast({ title: '加载失败，请返回重试', icon: 'none' })
   }
 })
-
-async function onSave() {
-  if (saving.value) return
-  const nickname = form.nickname.trim()
-  if (!nickname) {
-    uni.showToast({ title: '昵称不能为空', icon: 'none' })
-    return
-  }
-  const phone = form.phone.trim()
-  if (phone && !/^1[3-9]\d{9}$/.test(phone)) {
-    uni.showToast({ title: '手机号格式不正确', icon: 'none' })
-    return
-  }
-  saving.value = true
-  try {
-    await user.saveProfile(nickname, phone)
-    uni.showToast({ title: '已保存', icon: 'success' })
-    setTimeout(() => uni.navigateBack(), 600)
-  } catch (e) {
-    uni.showModal({
-      title: '保存失败',
-      content: e instanceof ApiError ? e.message : '请稍后重试',
-      showCancel: false,
-    })
-  } finally {
-    saving.value = false
-  }
-}
 
 function onLogout() {
   uni.showModal({
@@ -118,39 +100,34 @@ function onLogout() {
 <template>
   <view class="page">
     <view class="card section">
-      <view class="section-title">个人信息</view>
-
-      <view v-if="loaded" class="profile-head">
-        <view class="avatar">{{ (user.nickname || '用')[0] }}</view>
-        <view class="uid">ID {{ user.userId || '-' }}</view>
+      <view class="section-head">
+        <view class="section-title">个人信息</view>
+        <view class="edit-pill" @tap="goProfile">
+          <text>编辑资料</text>
+          <text class="edit-pill-chev">›</text>
+        </view>
       </view>
 
-      <view class="form-item">
-        <text class="form-label">昵称</text>
-        <input
-          v-model="form.nickname"
-          class="form-input"
-          maxlength="32"
-          placeholder="怎么称呼您"
-          :disabled="!loaded"
-        />
+      <view class="profile-head" @tap="goProfile">
+        <image v-if="avatarSrc" class="avatar" :src="avatarSrc" mode="aspectFill" />
+        <view v-else class="avatar">{{ displayName[0] }}</view>
+        <view class="profile-meta">
+          <view class="nickname">{{ displayName }}</view>
+          <view class="uid">ID {{ user.userId || '-' }}</view>
+        </view>
       </view>
-      <view class="form-item">
-        <text class="form-label">手机号</text>
-        <input
-          v-model="form.phone"
-          class="form-input"
-          type="number"
-          maxlength="11"
-          placeholder="选填，方便服务方联系"
-          :disabled="!loaded"
-        />
-      </view>
-      <view class="form-tip">昵称会在预约与服务过程中展示给服务方</view>
 
-      <view class="btn-primary save-btn" :class="{ 'is-disabled': saving }" @tap="onSave">
-        {{ saving ? '保存中…' : '保存' }}
+      <view class="info-row">
+        <text class="info-label">昵称</text>
+        <text class="info-value">{{ displayName }}</text>
       </view>
+      <view class="info-row">
+        <text class="info-label">手机号</text>
+        <text class="info-value" :class="{ 'is-empty': !user.phone }">{{ maskedPhone }}</text>
+      </view>
+
+      <view class="form-tip">昵称与头像会在预约与服务过程中展示给服务方</view>
+      <view class="edit-hint" @tap="goProfile">如需修改，点右上角「编辑资料」或头像</view>
     </view>
 
     <view class="card section">
@@ -201,17 +178,57 @@ function onLogout() {
   padding: 32rpx;
 }
 
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24rpx;
+}
+
 .section-title {
   font-size: 30rpx;
   font-weight: 600;
-  margin-bottom: 24rpx;
+}
+
+/* 编辑入口：设置页只读，真正的编辑都在资料页，所以入口要一眼能看见 */
+.edit-pill {
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  padding: 8rpx 20rpx;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--brand);
+  background: var(--brand-light);
+  border-radius: 999rpx;
+}
+
+.edit-pill:active {
+  opacity: 0.75;
+}
+
+.edit-pill-chev {
+  font-size: 26rpx;
+  line-height: 1;
 }
 
 .profile-head {
   display: flex;
   align-items: center;
   gap: 20rpx;
-  padding-bottom: 24rpx;
+  padding: 8rpx 0 24rpx;
+}
+
+.profile-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.nickname {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--text);
 }
 
 .avatar {
@@ -230,6 +247,35 @@ function onLogout() {
 .uid {
   font-size: 24rpx;
   color: var(--text-light);
+}
+
+/* 只读信息行：视觉上比输入框更轻，避免被误认为可编辑 */
+.info-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 0;
+  border-bottom: 1rpx solid #f3f4f6;
+}
+
+.info-label {
+  font-size: 27rpx;
+  color: var(--text-sub);
+}
+
+.info-value {
+  font-size: 28rpx;
+  color: var(--text);
+}
+
+.info-value.is-empty {
+  color: var(--text-light);
+}
+
+.edit-hint {
+  margin-top: 12rpx;
+  font-size: 23rpx;
+  color: var(--brand);
 }
 
 .form-item {
@@ -262,10 +308,6 @@ function onLogout() {
 .form-tip.center {
   text-align: center;
   margin-top: 20rpx;
-}
-
-.save-btn {
-  margin-top: 36rpx;
 }
 
 .logout-btn {

@@ -4,8 +4,17 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/auth'
+import { API_BASE } from '@/api'
 
 const auth = useAuthStore()
+
+/**
+ * 当前接口地址与构建环境。
+ * 后台误连生产是高风险操作（能改价、能退款），登录前就把目标显示出来，
+ * 比事后排查「为什么数据不对」便宜得多。
+ */
+const apiBase = API_BASE
+const envLabel = (import.meta.env.VITE_APP_ENV as string) || ''
 const router = useRouter()
 const route = useRoute()
 const formRef = ref<FormInstance>()
@@ -39,8 +48,8 @@ async function onSubmit() {
   <div class="login">
     <div class="card">
       <div class="brand">
-        <span class="mark">助</span>
-        <h1>社区好帮手</h1>
+        <img class="mark" src="@/assets/logo-mark.png" alt="邻有回应" />
+        <h1>邻有回应</h1>
         <p>运营后台</p>
       </div>
       <el-form ref="formRef" :model="form" :rules="rules" label-position="top" @keyup.enter="onSubmit">
@@ -53,6 +62,10 @@ async function onSubmit() {
         <el-button type="primary" size="large" class="submit" :loading="loading" @click="onSubmit">登 录</el-button>
       </el-form>
       <div class="tip">账号由运营在服务端创建，密码不写入版本库</div>
+      <div class="env-line">
+        <span class="env-tag" :class="{ remote: apiBase !== '/' }">{{ envLabel || '未标记环境' }}</span>
+        <span class="env-api">{{ apiBase === '/' ? '同域接口' : apiBase }}</span>
+      </div>
     </div>
   </div>
 </template>
@@ -74,18 +87,41 @@ async function onSubmit() {
 }
 .brand { text-align: center; margin-bottom: 28px; }
 .mark {
-  display: inline-flex;
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  background: var(--brand);
-  color: #fff;
-  font-size: 26px;
-  align-items: center;
-  justify-content: center;
+  /* display:block 会无视父级 text-align:center，必须自己水平居中 */
+  display: block;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto;
 }
 .brand h1 { font-size: 22px; margin: 12px 0 4px; }
 .brand p { margin: 0; color: #9aa3ad; font-size: 13px; }
 .submit { width: 100%; margin-top: 8px; }
 .tip { text-align: center; color: #9aa3ad; font-size: 12px; margin-top: 20px; }
+
+.env-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.env-tag {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: #0f7f78;
+  background: #e4f3f0;
+}
+
+/* 直连远端接口时用醒目色：这类构建一旦被误用，改动会落到真实数据上 */
+.env-tag.remote {
+  color: #b45309;
+  background: #fef5e6;
+}
+
+.env-api {
+  font-size: 11px;
+  color: #b6bec8;
+}
 </style>

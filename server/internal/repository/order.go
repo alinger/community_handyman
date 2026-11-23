@@ -94,11 +94,15 @@ func (r *OrderRepo) Events(ctx context.Context, orderID uint64) ([]model.OrderEv
 	return list, err
 }
 
-// CountCompleted 统计用户已完成订单数，用于遛宠熟悉费减免。
-func (r *OrderRepo) CountCompleted(ctx context.Context, userID uint64, st model.ServiceType) (int, error) {
+// CountSingleCompleted 统计用户「单次卡」已完成订单数，用于熟悉费累计减免。
+//
+// 月卡不计入：月卡订单本身永久免熟悉费，若再计入累计会出现
+// 「买过一张月卡就顶掉 5 单」的口径混乱。
+func (r *OrderRepo) CountSingleCompleted(ctx context.Context, userID uint64, st model.ServiceType) (int, error) {
 	var n int64
 	err := r.db.WithContext(ctx).Model(&model.Order{}).
-		Where("user_id = ? AND service_type = ? AND status = ?", userID, st, model.OrderCompleted).
+		Where("user_id = ? AND service_type = ? AND plan = ? AND status = ?",
+			userID, st, model.PlanSingle, model.OrderCompleted).
 		Count(&n).Error
 	return int(n), err
 }

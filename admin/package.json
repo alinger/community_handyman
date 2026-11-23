@@ -1,12 +1,13 @@
 {
   "name": "community-handyman-admin",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5174",
     "build": "vue-tsc --noEmit && vite build",
-    "preview": "vite preview --host 127.0.0.1 --port 5174"
+    "preview": "vite preview --host 127.0.0.1 --port 5174",
+    "build:remote": "vue-tsc --noEmit && vite build --mode remote"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",

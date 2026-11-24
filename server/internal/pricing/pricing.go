@@ -156,7 +156,8 @@ func calcGarbage(in Input) (Result, error) {
 		included = 1
 	}
 
-	items := []Item{{Name: "单次代倒垃圾", Amount: in.BasePrice, Note: fmt.Sprintf("含 %d 袋", included)}}
+	// 「含 N 袋」的说明不再展示（产品口径弱化袋数概念），明细只留档位价本身
+	items := []Item{{Name: "单次代倒垃圾", Amount: in.BasePrice}}
 	total := in.BasePrice
 	if extra := qty - included; extra > 0 && rules.ExtraBag > 0 {
 		amount := int64(extra) * rules.ExtraBag

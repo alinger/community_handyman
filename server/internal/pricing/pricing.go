@@ -75,10 +75,10 @@ type FamiliarProgress struct {
 // DogWalkRules 遛宠计价参数，对应 service_skus.rules。
 type DogWalkRules struct {
 	FeedOnly           int64    `json:"feed_only"`             // 仅喂食清洁单价
-	Base               int64    `json:"base"`                  // 遛狗基础价
-	BaseMinutes        int      `json:"base_minutes"`          // 基础价包含时长
-	StepMinutes        int      `json:"step_minutes"`          // 超出后每档分钟数
-	StepPrice          int64    `json:"step_price"`            // 每档加价
+	Base               int64    `json:"base"`                  // [已废弃] 旧公式基础价，000022 起时长走档位表
+	BaseMinutes        int      `json:"base_minutes"`          // [已废弃] 旧公式包含时长
+	StepMinutes        int      `json:"step_minutes"`          // [已废弃] 旧公式每档分钟数
+	StepPrice          int64    `json:"step_price"`            // [已废弃] 旧公式每档加价
 	ExtraPet           int64    `json:"extra_pet"`             // 每多一只加价
 	OverKm             float64  `json:"distance_threshold_km"` // 距离阈值，缺省 3 公里
 	OverKmPrice        int64    `json:"over_3km"`              // 超出距离加价
@@ -86,7 +86,10 @@ type DogWalkRules struct {
 	FamiliarFreeOrders int      `json:"familiar_free_orders"`  // 达到该订单数免熟悉费
 	HolidayExtra       int64    `json:"holiday_extra"`         // 节日加价
 	HolidayDates       []string `json:"holiday_dates"`         // 可配置的加价日期
-	MaxMinutes         int      `json:"max_minutes"`           // 时长上限
+	MaxMinutes         int      `json:"max_minutes"`           // [已废弃] 旧公式时长上限
+	// DurationOptions 服务时长档位（自 000022 起）：后台逐档配置，
+	// 用户单选一档，档位金额即「基础费用」；金额 0 的档位不出现在费用明细里。
+	DurationOptions []AccompanyItem `json:"duration_options"`
 }
 
 // GarbageRules 代倒垃圾计价参数。
@@ -163,21 +166,22 @@ func calcGarbage(in Input) (Result, error) {
 	return Result{Total: total, Items: items}, nil
 }
 
+// findDurationOption 按分钟数查时长档位。
+func findDurationOption(opts []AccompanyItem, minutes int) (AccompanyItem, bool) {
+	for _, o := range opts {
+		if o.Minutes == minutes {
+			return o, true
+		}
+	}
+	return AccompanyItem{}, false
+}
+
 func calcDogWalk(in Input) (Result, error) {
 	var r DogWalkRules
 	if len(in.Rules) > 0 {
 		if err := json.Unmarshal(in.Rules, &r); err != nil {
 			return Result{}, fmt.Errorf("解析遛宠计价规则失败: %w", err)
 		}
-	}
-	if r.Base == 0 {
-		r.Base = in.BasePrice
-	}
-	if r.BaseMinutes <= 0 {
-		r.BaseMinutes = 20
-	}
-	if r.StepMinutes <= 0 {
-		r.StepMinutes = 10
 	}
 	if r.OverKm <= 0 {
 		r.OverKm = 3
@@ -210,26 +214,19 @@ func calcDogWalk(in Input) (Result, error) {
 		}}
 		total = amount
 	} else {
-		items = []Item{{Name: "遛狗基础", Amount: r.Base, Note: fmt.Sprintf("含 %d 分钟", r.BaseMinutes)}}
-		total = r.Base
-
-		// 时长加价：超出部分按 10 分钟一档向上取整
-		if in.DurationMin > r.BaseMinutes {
-			if r.MaxMinutes > 0 && in.DurationMin > r.MaxMinutes {
-				return Result{}, fmt.Errorf("单次时长不能超过 %d 分钟", r.MaxMinutes)
-			}
-			extraMin := in.DurationMin - r.BaseMinutes
-			steps := (extraMin + r.StepMinutes - 1) / r.StepMinutes
-			amount := int64(steps) * r.StepPrice
-			items = append(items, Item{
-				Name:   fmt.Sprintf("时长加价 %d 分钟", extraMin),
-				Amount: amount,
-				Note:   fmt.Sprintf("%d 档 × %d 元", steps, r.StepPrice/100),
-			})
-			total += amount
+		// 时长计价（自 000022 起）：档位表由后台逐档配置，单选一档即订单金额，
+		// 旧的「基础价含 20 分钟 + 超出按档加价」公式废弃。
+		opt, ok := findDurationOption(r.DurationOptions, in.DurationMin)
+		if !ok {
+			return Result{}, fmt.Errorf("请选择可用的服务时长")
 		}
+		// 档位金额即「基础费用」明细；配成 0 元的免费档不出现在费用列表里
+		if opt.Price > 0 {
+			items = append(items, Item{Name: "基础费用", Amount: opt.Price, Note: opt.Name})
+		}
+		total += opt.Price
 
-		// 多宠加价：第一只含在基础价内
+		// 多宠加价：第一只含在档位价内
 		if pets > 1 && r.ExtraPet > 0 {
 			amount := int64(pets-1) * r.ExtraPet
 			items = append(items, Item{Name: fmt.Sprintf("多宠 %d 只", pets-1), Amount: amount})
@@ -274,59 +271,32 @@ func calcDogWalk(in Input) (Result, error) {
 	return Result{Total: total, Items: items, Familiar: familiar}, nil
 }
 
-// calcAccompany 按后台配置的服务项单价求和。
-// 用户只回传 code，价格一律从 SKU 规则读取，前端无法篡改金额；
-// 医院必须来自后台选项，防止用自由文本绕过配置。
-// 基础服务费（base_item）默认必选：无论前端传不传都强制计入，且不能靠勾选取消。
+// calcAccompany 按后台配置的计价档位计价（自 000021 起）。
+// 用户单选一个档位（如 20分钟/25元），回传其 code，价格一律从 SKU 规则读取，
+// 前端无法篡改金额；医院必须来自后台选项，防止用自由文本绕过配置。
+// 旧的多选求和与基础服务费（base_item）已随档位模式废弃，配置由迁移清理。
 func calcAccompany(in Input) (Result, error) {
 	opts, err := ParseAccompanyOptions(in.Rules)
 	if err != nil {
 		return Result{}, err
 	}
-	if len(opts.ServiceItems) == 0 && opts.BaseItem == nil {
-		return Result{}, fmt.Errorf("陪诊服务项尚未配置，请联系运营在后台设置")
+	if len(opts.ServiceItems) == 0 {
+		return Result{}, fmt.Errorf("陪诊服务档位尚未配置，请联系运营在后台设置")
 	}
 	if !opts.HospitalValid(in.Hospital) {
 		return Result{}, fmt.Errorf("请选择列表中的就诊医院")
 	}
 
-	// 先把用户勾选的 code 去重，任何一个不在配置里都直接拒绝，避免静默少算。
-	// base_item 的 code 若被前端回传则忽略：基础费由后端强制加，不接受勾选/取消。
-	baseCode := ""
-	if opts.BaseItem != nil {
-		baseCode = opts.BaseItem.Code
+	// 档位模式：必须且只能选一个。多选/零选都拒绝，避免旧客户端语义混入。
+	if len(in.ServiceItems) != 1 {
+		return Result{}, fmt.Errorf("请选择一个陪诊服务档位")
 	}
-	wanted := make(map[string]struct{}, len(in.ServiceItems))
-	for _, code := range in.ServiceItems {
-		if code == baseCode {
-			continue
-		}
-		if _, ok := opts.FindItem(code); !ok {
-			return Result{}, fmt.Errorf("包含未配置的陪诊服务项，请刷新后重试")
-		}
-		wanted[code] = struct{}{}
+	it, ok := opts.FindItem(in.ServiceItems[0])
+	if !ok {
+		return Result{}, fmt.Errorf("所选陪诊服务档位不存在，请刷新后重试")
 	}
-	// 没有基础费的老配置仍要求至少选一项，保持既有行为；有基础费时允许只买基础服务。
-	if opts.BaseItem == nil && len(wanted) == 0 {
-		return Result{}, fmt.Errorf("请至少选择一项陪诊服务")
-	}
-
-	// 基础费排明细首位，价格取自后台配置，前端无法改。
-	items := make([]Item, 0, len(wanted)+1)
-	var total int64
-	if opts.BaseItem != nil {
-		items = append(items, Item{Name: opts.BaseItem.Name, Amount: opts.BaseItem.Price, Note: "默认必选"})
-		total += opts.BaseItem.Price
-	}
-	// 按后台配置顺序展开明细，价格全部取自配置
-	for _, it := range opts.ServiceItems {
-		if _, ok := wanted[it.Code]; !ok {
-			continue
-		}
-		items = append(items, Item{Name: it.Name, Amount: it.Price})
-		total += it.Price
-	}
-	return Result{Total: total, Items: items}, nil
+	items := []Item{{Name: it.Name, Amount: it.Price}}
+	return Result{Total: it.Price, Items: items}, nil
 }
 
 // matchHoliday 判断日期是否落在配置的加价日期内。

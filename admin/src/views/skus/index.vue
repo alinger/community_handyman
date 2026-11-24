@@ -39,17 +39,23 @@ const numS = (v: unknown, d: number) => (typeof v === 'number' ? String(v) : Str
 type KV = { label: string; value: string }
 
 const DOG_PRICE_LABELS: Record<string, string> = {
-  base: '起步价', familiar: '熟悉费', over_3km: '超3km加价', extra_pet: '每多一只',
-  feed_only: '仅喂食', step_price: '时长每档加价', holiday_extra: '节日加价',
+  familiar: '熟悉费', over_3km: '超3km加价', extra_pet: '每多一只',
+  feed_only: '仅喂食', holiday_extra: '节日加价',
 }
 const DOG_COUNT_LABELS: Record<string, string> = {
-  base_minutes: '含时长（分钟）', step_minutes: '每档时长（分钟）', max_minutes: '最长时长（分钟）',
   familiar_free_orders: '免熟悉费订单数', distance_threshold_km: '距离阈值（km）',
 }
 
 function itemsOf(sku: ServiceSku) {
   const r = (sku.rules ?? {}) as Record<string, unknown>
   return Array.isArray(r.service_items) ? (r.service_items as { code: string; name: string; price: number }[]) : []
+}
+/** 遛宠服务时长档位（单选一档即订单金额） */
+function dogTiersOf(sku: ServiceSku) {
+  const r = (sku.rules ?? {}) as Record<string, unknown>
+  return Array.isArray(r.duration_options)
+    ? (r.duration_options as { code: string; name: string; price: number; minutes: number }[])
+    : []
 }
 function hospitalsOf(sku: ServiceSku) {
   const r = (sku.rules ?? {}) as Record<string, unknown>
@@ -66,23 +72,21 @@ function clip(names: string[], n = 3) {
 function summaryLines(sku: ServiceSku): string[] {
   const r = (sku.rules ?? {}) as Record<string, unknown>
   if (sku.service_type === 'accompany') {
-    const bi = (r.base_item ?? {}) as { name?: string; price?: number }
     const items = itemsOf(sku)
     const hs = hospitalsOf(sku)
     const lines: string[] = []
-    lines.push(
-      r.manual_quote === true
-        ? '手动报价模式：下单后由运营报价确认'
-        : `按服务项自动计价 · 基础服务费 ${bi.name || '基础服务费'} ${fen2(bi.price)}`,
-    )
-    if (items.length) lines.push(`服务项 ${items.length} 项：${clip(items.map((i) => `${i.name} ${fen2(i.price)}`))}`)
+    lines.push('档位计价：用户单选一档即订单金额')
+    if (items.length) lines.push(`服务档位 ${items.length} 档：${clip(items.map((i) => `${i.name} ${fen2(i.price)}`))}`)
     if (hs.length) lines.push(`支持医院 ${hs.length} 家：${clip(hs.map((h) => h.name))}`)
     return lines
   }
   if (sku.service_type === 'dogwalk') {
+    const tiers = dogTiersOf(sku)
     const lines = [
-      `起步 ${fen2(r.base)}（含 ${numS(r.base_minutes, 20)} 分钟，超时每 ${numS(r.step_minutes, 10)} 分钟加 ${fen2(r.step_price)}）`,
-      `最长 ${numS(r.max_minutes, 120)} 分钟 · 距离阈值 ${numS(r.distance_threshold_km, 3)}km，超出加 ${fen2(r.over_3km)}`,
+      `档位计价：用户单选一档即订单金额${
+        tiers.length ? ` · ${clip(tiers.map((t) => `${t.name} ${fen2(t.price)}`))}` : '（档位未配置）'
+      }`,
+      `距离阈值 ${numS(r.distance_threshold_km, 3)}km，超出加 ${fen2(r.over_3km)}`,
       `熟悉费 ${fen2(r.familiar)}（前 ${numS(r.familiar_free_orders, 5)} 单免收）· 每多一只 ${fen2(r.extra_pet)} · 仅喂食 ${fen2(r.feed_only)}`,
       `节日加价 ${fen2(r.holiday_extra)}${datesOf(sku).length ? `（已设 ${datesOf(sku).length} 个日期）` : ''}`,
     ]
@@ -107,16 +111,17 @@ function summaryLines(sku: ServiceSku): string[] {
 function detailRows(sku: ServiceSku): KV[] {
   const r = (sku.rules ?? {}) as Record<string, unknown>
   if (sku.service_type === 'accompany') {
-    const bi = (r.base_item ?? {}) as { name?: string; price?: number }
     return [
-      { label: '手动报价', value: r.manual_quote === true ? '开启' : '关闭（按服务项自动计价）' },
-      { label: '基础服务费', value: `${bi.name || '—'}　${fen2(bi.price)}` },
-      { label: '服务项数', value: `${itemsOf(sku).length} 项` },
+      { label: '计价模式', value: '档位单选（选一档即订单金额）' },
+      { label: '服务档位数', value: `${itemsOf(sku).length} 档` },
       { label: '支持医院', value: `${hospitalsOf(sku).length} 家` },
     ]
   }
   if (sku.service_type === 'dogwalk') {
-    const out: KV[] = []
+    const out: KV[] = [
+      { label: '计价模式', value: '档位单选（选一档即订单金额）' },
+      { label: '服务档位数', value: `${dogTiersOf(sku).length} 档` },
+    ]
     for (const k of Object.keys(DOG_PRICE_LABELS)) out.push({ label: DOG_PRICE_LABELS[k]! + '（元）', value: fen2(r[k]) })
     for (const k of Object.keys(DOG_COUNT_LABELS)) out.push({ label: DOG_COUNT_LABELS[k]! + '', value: numS(r[k], 0) })
     return out
@@ -143,18 +148,16 @@ function detailRows(sku: ServiceSku): KV[] {
 }
 
 // ---------- 结构化表单状态 ----------
-interface NamedRow { code: string; name: string; priceYuan: number }
+interface NamedRow { code: string; name: string; priceYuan: number; minutes: number }
 const form = reactive({
   basePriceYuan: 0,
-  // 陪诊
-  manualQuote: false,
-  baseItemName: '',
-  baseItemPriceYuan: 0,
+  // 陪诊：计价档位（单选）+ 医院列表
   hospitals: [] as { code: string; name: string }[],
   serviceItems: [] as NamedRow[],
-  // 遛宠：价格（元）
-  dogYuan: { base: 0, familiar: 0, over_3km: 0, extra_pet: 0, feed_only: 0, step_price: 0, holiday_extra: 0 } as Record<string, number>,
-  dogCount: { max_minutes: 120, base_minutes: 20, step_minutes: 10, familiar_free_orders: 5, distance_threshold_km: 3 } as Record<string, number>,
+  // 遛宠：附加费用（元）；时长走档位表（dogTiers）
+  dogYuan: { familiar: 0, over_3km: 0, extra_pet: 0, feed_only: 0, holiday_extra: 0 } as Record<string, number>,
+  dogCount: { familiar_free_orders: 5, distance_threshold_km: 3 } as Record<string, number>,
+  dogTiers: [] as NamedRow[],
   holidayDates: [] as string[],
   // 垃圾
   garbage: {
@@ -193,27 +196,26 @@ function openEdit(sku: ServiceSku) {
   const r = (sku.rules ?? {}) as Record<string, unknown>
 
   // 陪诊
-  form.manualQuote = r.manual_quote === true
-  const bi = (r.base_item ?? null) as { code?: string; name?: string; price?: number } | null
-  form.baseItemName = bi?.name || '基础服务费'
-  form.baseItemPriceYuan = toYuan(bi?.price)
   form.hospitals = Array.isArray(r.hospitals)
     ? (r.hospitals as { code: string; name: string }[]).map((h) => ({ code: h.code, name: h.name }))
     : []
   form.serviceItems = Array.isArray(r.service_items)
-    ? (r.service_items as { code: string; name: string; price: number }[]).map((i) => ({
-        code: i.code, name: i.name, priceYuan: toYuan(i.price),
+    ? (r.service_items as { code: string; name: string; price: number; minutes?: number }[]).map((i) => ({
+        code: i.code, name: i.name, priceYuan: toYuan(i.price), minutes: i.minutes || 0,
       }))
     : []
 
   // 遛宠
-  const dogPriceKeys = ['base', 'familiar', 'over_3km', 'extra_pet', 'feed_only', 'step_price', 'holiday_extra']
+  const dogPriceKeys = ['familiar', 'over_3km', 'extra_pet', 'feed_only', 'holiday_extra']
   for (const k of dogPriceKeys) form.dogYuan[k] = toYuan(r[k])
-  const dogCountKeys = ['max_minutes', 'base_minutes', 'step_minutes', 'familiar_free_orders', 'distance_threshold_km']
+  const dogCountKeys = ['familiar_free_orders', 'distance_threshold_km']
   for (const k of dogCountKeys) {
     const v = r[k]
     form.dogCount[k] = typeof v === 'number' ? v : form.dogCount[k]
   }
+  form.dogTiers = dogTiersOf(sku).map((t) => ({
+    code: t.code, name: t.name, priceYuan: toYuan(t.price), minutes: t.minutes || 0,
+  }))
   form.holidayDates = Array.isArray(r.holiday_dates) ? (r.holiday_dates as string[]).slice() : []
 
   // 垃圾
@@ -239,22 +241,39 @@ function buildRules(): Record<string, unknown> {
   const src = (editing.value?.rules ?? {}) as Record<string, unknown>
   const out: Record<string, unknown> = { ...src }
   if (isAccompany.value) {
-    out.manual_quote = form.manualQuote
-    out.base_item = {
-      code: (src.base_item as { code?: string } | undefined)?.code || 'base_fee',
-      name: form.baseItemName,
-      price: toFen(form.baseItemPriceYuan),
-    }
     out.hospitals = form.hospitals
       .filter((h) => h.name.trim())
       .map((h) => ({ code: h.code, name: h.name.trim() }))
     out.service_items = form.serviceItems
       .filter((i) => i.name.trim())
-      .map((i) => ({ code: i.code, name: i.name.trim(), price: toFen(i.priceYuan) }))
-    out.items = (out.service_items as { name: string }[]).map((i) => i.name)
+      .map((i) => ({
+        code: i.code,
+        name: i.name.trim(),
+        price: toFen(i.priceYuan),
+        ...(i.minutes > 0 ? { minutes: i.minutes } : {}),
+      }))
+    // 旧的多选计价/基础费/手动报价键随档位模式废弃，主动清掉避免残留误导
+    delete out.base_item
+    delete out.manual_quote
+    delete out.items
+    delete out.billing
   } else if (isDogwalk.value) {
     for (const k of Object.keys(form.dogYuan)) out[k] = toFen(form.dogYuan[k])
     for (const k of Object.keys(form.dogCount)) out[k] = form.dogCount[k]
+    out.duration_options = form.dogTiers
+      .filter((t) => t.name.trim())
+      .map((t) => ({
+        code: t.code,
+        name: t.name.trim(),
+        price: toFen(t.priceYuan),
+        ...(t.minutes > 0 ? { minutes: t.minutes } : {}),
+      }))
+    // 旧的时长公式键随档位模式废弃，主动清掉避免残留误导
+    delete out.base
+    delete out.base_minutes
+    delete out.step_minutes
+    delete out.step_price
+    delete out.max_minutes
     out.holiday_dates = [...form.holidayDates].sort()
   } else if (isGarbage.value) {
     if (editing.value?.plan === 'monthly') {
@@ -292,14 +311,29 @@ function removeHospital(i: number) {
   form.hospitals.splice(i, 1)
 }
 function addServiceItem() {
-  form.serviceItems.push({ code: genCode('si'), name: '', priceYuan: 0 })
+  form.serviceItems.push({ code: genCode('si'), name: '', priceYuan: 0, minutes: 0 })
 }
 function removeServiceItem(i: number) {
   form.serviceItems.splice(i, 1)
 }
+function addDogTier() {
+  form.dogTiers.push({ code: genCode('dur'), name: '', priceYuan: 0, minutes: 0 })
+}
+function removeDogTier(i: number) {
+  form.dogTiers.splice(i, 1)
+}
 
 async function save() {
   if (!editing.value) return
+
+  // 档位是计价入口：一个档位都没有的话用户端直接无法下单，保存前拦住
+  if (!advanced.value && (isDogwalk.value || isAccompany.value)) {
+    const rows = isDogwalk.value ? form.dogTiers : form.serviceItems
+    if (!rows.some((r) => r.name.trim())) {
+      ElMessage.error('请至少配置一个服务档位（名称不能为空）')
+      return
+    }
+  }
 
   // 结构化模式下先校验包月时段：格式错了要等到用户下单才炸，很难查
   if (!advanced.value && isGarbage.value && editing.value.plan === 'monthly') {
@@ -438,25 +472,20 @@ async function save() {
           <template v-else>
             <!-- 陪诊 -->
             <template v-if="isAccompany">
-              <el-form-item label="手动报价">
-                <el-switch v-model="form.manualQuote" />
-                <span class="hint">开启后用户下单进入「待报价」，由运营报价确认；关闭则按服务项自动计价</span>
-              </el-form-item>
-              <el-form-item label="基础服务费">
-                <el-input v-model="form.baseItemName" style="width: 200px" placeholder="名称" />
-                <el-input-number v-model="form.baseItemPriceYuan" :min="0" :precision="2" :step="1" style="width: 160px; margin-left: 8px" />
-                <span class="hint">元。用户下单固定收取</span>
-              </el-form-item>
-              <el-form-item label="服务项">
+              <el-form-item label="服务档位">
                 <div class="rows">
                   <div v-for="(it, i) in form.serviceItems" :key="it.code" class="row">
-                    <el-input v-model="it.name" placeholder="项目名称" style="width: 260px" />
+                    <el-input v-model="it.name" placeholder="档位名称，如 20分钟" style="width: 200px" />
+                    <el-input-number v-model="it.minutes" :min="0" :step="5" style="width: 130px; margin-left: 8px" />
+                    <span class="row-unit">分钟</span>
                     <el-input-number v-model="it.priceYuan" :min="0" :precision="2" :step="1" style="width: 150px; margin-left: 8px" />
                     <span class="row-unit">元</span>
                     <el-button link type="danger" @click="removeServiceItem(i)">删除</el-button>
                   </div>
-                  <el-button size="small" @click="addServiceItem">+ 添加服务项</el-button>
-                  <div class="hint" style="margin-left: 0">按项计价；用户端展示的项目名与价格即来自这里</div>
+                  <el-button size="small" @click="addServiceItem">+ 添加档位</el-button>
+                  <div class="hint" style="margin-left: 0">
+                    计价档位（用户端单选一档即订单金额，如 20分钟 25 元）；名称与价格即用户端所见，时长随订单落库供派单参考
+                  </div>
                 </div>
               </el-form-item>
               <el-form-item label="支持医院">
@@ -472,17 +501,33 @@ async function save() {
 
             <!-- 遛宠 -->
             <template v-else-if="isDogwalk">
-              <el-form-item label="价格（元）">
+              <el-form-item label="时长档位">
+                <div class="rows">
+                  <div v-for="(t, i) in form.dogTiers" :key="t.code" class="row">
+                    <el-input v-model="t.name" placeholder="档位名称，如 20分钟" style="width: 200px" />
+                    <el-input-number v-model="t.minutes" :min="0" :step="5" style="width: 130px; margin-left: 8px" />
+                    <span class="row-unit">分钟</span>
+                    <el-input-number v-model="t.priceYuan" :min="0" :precision="2" :step="1" style="width: 150px; margin-left: 8px" />
+                    <span class="row-unit">元</span>
+                    <el-button link type="danger" @click="removeDogTier(i)">删除</el-button>
+                  </div>
+                  <el-button size="small" @click="addDogTier">+ 添加档位</el-button>
+                  <div class="hint" style="margin-left: 0">
+                    计价档位（用户端单选一档即订单金额）；金额为 0 的档位不计入费用明细
+                  </div>
+                </div>
+              </el-form-item>
+              <el-form-item label="附加费用（元）">
                 <div class="grid">
-                  <div v-for="k in (['base','familiar','over_3km','extra_pet','feed_only','step_price','holiday_extra'] as const)" :key="k" class="cell">
+                  <div v-for="k in (['familiar','over_3km','extra_pet','feed_only','holiday_extra'] as const)" :key="k" class="cell">
                     <span class="cell-label">{{ DOG_PRICE_LABELS[k] }}</span>
                     <el-input-number v-model="form.dogYuan[k]" :min="0" :precision="2" :step="1" style="width: 150px" />
                   </div>
                 </div>
               </el-form-item>
-              <el-form-item label="时长 / 规则">
+              <el-form-item label="附加规则">
                 <div class="grid">
-                  <div v-for="k in (['base_minutes','step_minutes','max_minutes','familiar_free_orders','distance_threshold_km'] as const)" :key="k" class="cell">
+                  <div v-for="k in (['familiar_free_orders','distance_threshold_km'] as const)" :key="k" class="cell">
                     <span class="cell-label">{{ DOG_COUNT_LABELS[k] }}</span>
                     <el-input-number v-model="form.dogCount[k]" :min="0" style="width: 150px" />
                   </div>

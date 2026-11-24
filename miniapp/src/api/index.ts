@@ -24,10 +24,12 @@ export interface AccompanyHospital {
   name: string
 }
 
+/** 陪诊计价档位（单选）。自档位模式起，name 即档位名（如 20分钟），minutes 为服务时长 */
 export interface AccompanyServiceItem {
   code: string
   name: string
   price: number
+  minutes?: number
 }
 
 export interface AccompanyOptions {
@@ -549,6 +551,23 @@ export function slotAvailability(date: string, serviceType: string) {
 /** 陪诊可选项：医院、可多选服务项与默认必选的基础费，由后台配置 */
 export function accompanyOptions() {
   return request<AccompanyOptions>({ url: '/api/v1/services/accompany/options' })
+}
+
+/** 遛宠服务时长档位（单选一档即订单金额），由后台配置 */
+export interface DogwalkDurationOption {
+  code: string
+  name: string
+  price: number
+  minutes: number
+}
+
+export interface DogwalkOptions {
+  duration_options: DogwalkDurationOption[]
+}
+
+/** 遛宠可选项：后台配置的时长档位 */
+export function dogwalkOptions() {
+  return request<DogwalkOptions>({ url: '/api/v1/services/dogwalk/options' })
 }
 
 export function checkArea(data: { community: string; lane?: string; house_no: string }) {

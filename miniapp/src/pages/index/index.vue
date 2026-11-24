@@ -17,6 +17,7 @@ const menuOpen = ref(false)
  * 首页只承担「介绍与入口」的作用。
  * 图标改为 CSS 绘制的几何图形 —— emoji 在不同机型上字重、色彩差异很大，
  * 三张白卡并排时视觉噪音明显，用统一描边图标更稳。
+ * soon: true 的服务只展示不可进入（点一下提示敬请期待）。
  */
 const services = [
   {
@@ -24,7 +25,7 @@ const services = [
     name: '代倒垃圾',
     desc: '专业准时 · 便捷省心',
     tone: 'green',
-    tag: '按袋计费',
+    tag: '按月计费',
   },
   {
     type: 'dogwalk',
@@ -38,7 +39,24 @@ const services = [
     name: '陪诊服务',
     desc: '贴心陪同 · 安心就医',
     tone: 'blue',
-    tag: '按项计价',
+    tag: '敬请期待',
+    soon: true,
+  },
+  {
+    type: 'kidride',
+    name: '接送小孩',
+    desc: '准时接送 · 安全放心',
+    tone: 'purple',
+    tag: '敬请期待',
+    soon: true,
+  },
+  {
+    type: 'express',
+    name: '代取快递',
+    desc: '快递代取 · 省时省力',
+    tone: 'cyan',
+    tag: '敬请期待',
+    soon: true,
   },
 ]
 
@@ -81,6 +99,15 @@ onShow(async () => {
     console.warn('[index] 加载失败', e)
   }
 })
+
+function onServiceTap(s: (typeof services)[number]) {
+  // 未上线的服务只提示，不进入预约页
+  if (s.soon) {
+    uni.showToast({ title: '敬请期待', icon: 'none' })
+    return
+  }
+  goCreate(s.type)
+}
 
 function goCreate(type: string) {
   // 访客/未登录：先问要不要登录，避免直接跳走打断浏览
@@ -180,14 +207,14 @@ const menuItems = [
       </view>
     </view>
 
-    <!-- 三个服务入口 -->
+    <!-- 五个服务入口：三个未上线（敬请期待），点了只提示不进入 -->
     <view class="services">
       <view
         v-for="s in services"
         :key="s.type"
         class="svc"
-        :class="`tone-${s.tone}`"
-        @tap="goCreate(s.type)"
+        :class="[`tone-${s.tone}`, { 'svc-soon': s.soon }]"
+        @tap="onServiceTap(s)"
       >
         <view class="svc-top">
           <view class="svc-icon">
@@ -204,15 +231,27 @@ const menuItems = [
               <view class="toe t1" /><view class="toe t2" /><view class="toe t3" /><view class="toe t4" />
             </view>
             <!-- 急救箱 -->
-            <view v-else class="ic-aid">
+            <view v-else-if="s.type === 'accompany'" class="ic-aid">
               <view class="aid-cross" />
+            </view>
+            <!-- 书包（接送小孩） -->
+            <view v-else-if="s.type === 'kidride'" class="ic-bag">
+              <view class="bag-handle" />
+              <view class="bag-body">
+                <view class="bag-pocket" />
+              </view>
+            </view>
+            <!-- 快递箱 -->
+            <view v-else-if="s.type === 'express'" class="ic-box">
+              <view class="tape-h" /><view class="tape-v" />
             </view>
           </view>
           <view class="svc-tag">{{ s.tag }}</view>
         </view>
         <view class="svc-name">{{ s.name }}</view>
         <view class="svc-desc">{{ s.desc }}</view>
-        <view class="svc-arrow">立即预约 ›</view>
+        <!-- 未上线服务不显示底部动作行：角标已表达「敬请期待」，重复一遍显得啰嗦 -->
+        <view v-if="!s.soon" class="svc-arrow">立即预约 ›</view>
       </view>
     </view>
 
@@ -689,6 +728,27 @@ const menuItems = [
   background: #e6effa;
 }
 
+.tone-purple .svc-tag {
+  color: #6b4fa0;
+  background: #efe9f8;
+}
+
+.tone-cyan .svc-tag {
+  color: #0d6e8c;
+  background: #e2f2f6;
+}
+
+/* 未上线服务（敬请期待）：整卡降不透明度置灰，角标盖一层灰色。
+   选择器多一层 .svc 保证优先级压过上面的 tone 配色 */
+.svc.svc-soon {
+  opacity: 0.66;
+}
+
+.svc.svc-soon .svc-tag {
+  color: #5c6662;
+  background: #e2e7e5;
+}
+
 .svc-name {
   font-size: 27rpx;
   font-weight: 700;
@@ -849,6 +909,71 @@ const menuItems = [
   transform: translateY(-50%);
   height: 5rpx;
   width: 100%;
+}
+
+/* 书包（接送小孩）：提手 + 包身 + 前袋，统一描边几何风 */
+.ic-bag {
+  width: 42rpx;
+  height: 46rpx;
+  position: relative;
+}
+
+.bag-handle {
+  width: 16rpx;
+  height: 10rpx;
+  margin: 0 auto;
+  border: 3rpx solid #6b4fa0;
+  border-bottom: none;
+  border-radius: 6rpx 6rpx 0 0;
+  box-sizing: border-box;
+}
+
+.bag-body {
+  width: 42rpx;
+  height: 34rpx;
+  border: 3rpx solid #6b4fa0;
+  border-radius: 8rpx;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 6rpx;
+}
+
+.bag-pocket {
+  width: 22rpx;
+  height: 6rpx;
+  background: #6b4fa0;
+  border-radius: 3rpx;
+}
+
+/* 快递箱（代取快递）：箱体 + 箱盖横线 + 中缝竖线 */
+.ic-box {
+  width: 44rpx;
+  height: 38rpx;
+  border: 3rpx solid #0d6e8c;
+  border-radius: 6rpx;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.ic-box .tape-h {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 9rpx;
+  height: 3rpx;
+  background: #0d6e8c;
+}
+
+.ic-box .tape-v {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 3rpx;
+  margin-left: -2rpx;
+  background: #0d6e8c;
 }
 
 /* ---------- 提示条 ---------- */

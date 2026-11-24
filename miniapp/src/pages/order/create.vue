@@ -7,6 +7,7 @@ import {
   checkArea,
   createAddress,
   createOrder,
+  dogwalkOptions,
   getGarbagePlan,
   getQuotas,
   listCommunities,
@@ -16,6 +17,7 @@ import {
   type AccompanyHospital,
   type AccompanyServiceItem,
   type CreateOrderPayload,
+  type DogwalkDurationOption,
   type GarbagePlan,
   type PreviewResp,
   type SlotAvailability,
@@ -28,7 +30,30 @@ import { ApiError, BASE_URL } from '@/utils/request'
 const user = useUserStore()
 
 const dates = nextDays(7)
-const durations = [20, 30, 40, 60]
+/**
+ * 服务时长档位：后台逐档配置（单选一档即订单金额）。
+ * 加载失败时回落到旧四档只渲染分钟数，金额仍由后端按配置计价兜底。
+ */
+const FALLBACK_DURATIONS = [20, 30, 40, 60]
+const durationOptions = ref<DogwalkDurationOption[]>(
+  FALLBACK_DURATIONS.map((m) => ({ code: `dur_${m}`, name: `${m}分钟`, price: 0, minutes: m })),
+)
+
+/** 拉取遛宠时长档位；不阻塞页面渲染 */
+async function loadDogwalkOptions() {
+  try {
+    const opts = await dogwalkOptions()
+    if (opts.duration_options?.length) {
+      durationOptions.value = opts.duration_options
+      // 默认选中时长不在新档位里时，回落到第一档
+      if (!durationOptions.value.some((o) => o.minutes === form.durationMin)) {
+        form.durationMin = durationOptions.value[0].minutes
+      }
+    }
+  } catch (e) {
+    console.warn('[create] 遛宠档位加载失败', e)
+  }
+}
 /** 进入方式：与服务端 order.entry_method 的枚举保持一致 */
 const ENTRY_METHODS = [
   { value: 'knock', label: '敲门' },
@@ -127,11 +152,9 @@ const previewError = ref('')
 const submitting = ref(false)
 const showCalendar = ref(false)
 
-/** 陪诊可选项全部来自后台配置，前端不内置医院与服务项 */
+/** 陪诊可选项全部来自后台配置，前端不内置医院与计价档位 */
 const hospitals = ref<AccompanyHospital[]>([])
 const serviceItemOptions = ref<AccompanyServiceItem[]>([])
-/** 默认必选的基础服务费，勾选态锁定；价格只用于展示，金额由后端计算 */
-const baseItem = ref<AccompanyServiceItem | null>(null)
 
 /** 服务地址选择弹层：展示小区/门牌/联系人/电话/默认标签，比系统 actionSheet 信息更全 */
 const showAddressPicker = ref(false)
@@ -158,11 +181,17 @@ const hospitalName = computed(() =>
 const banner = computed(() => {
   const map: Record<string, { title: string; sub: string; art: string }> = {
     garbage: { title: '上门代倒垃圾', sub: '规范分类，按时上门', art: '🗑' },
-    dogwalk: { title: '上门遛宠', sub: '20 分钟起，可加时长', art: '🐾' },
-    accompany: { title: '医院陪诊', sub: '按项目明码计价', art: '🏥' },
+    dogwalk: { title: '上门遛宠', sub: '按时长一口价', art: '🐾' },
+    accompany: { title: '医院陪诊', sub: '按档位一口价', art: '🏥' },
   }
   return map[form.serviceType] || map.garbage
 })
+
+/**
+ * 费用区标题：三个服务都是确定金额（陪诊/遛宠按档位一口价、垃圾按包月固定价），
+ * 不再有「估算」概念。
+ */
+const feeLabel = computed(() => (form.serviceType === 'garbage' ? '应付费用' : '应付金额'))
 
 /**
  * 时段余量：满员时段置灰不可选。
@@ -252,6 +281,9 @@ onLoad(async (query) => {
   if (form.serviceType === 'garbage') {
     await loadGarbageInfo()
   }
+  if (form.serviceType === 'dogwalk') {
+    await loadDogwalkOptions()
+  }
   if (!isGarbageMonthly.value) {
     await loadSlotAvail()
     syncSlot()
@@ -278,13 +310,12 @@ async function loadGarbageInfo() {
   // 默认选包月；单次随时可买，有赠送次数时自动抵扣
 }
 
-/** 医院与陪诊服务项都从后台拉取，用户只能选、不能自由输入 */
+/** 医院与陪诊计价档位都从后台拉取，用户只能选、不能自由输入 */
 async function loadAccompanyOptions() {
   try {
     const opts = await accompanyOptions()
     hospitals.value = opts.hospitals || []
     serviceItemOptions.value = opts.service_items || []
-    baseItem.value = opts.base_item || null
     if (!hospitals.value.some((h) => h.code === form.hospital)) {
       form.hospital = hospitals.value[0]?.code || ''
     }
@@ -310,10 +341,9 @@ function chooseHospital() {
   })
 }
 
-function toggleServiceItem(code: string) {
-  const i = form.serviceItems.indexOf(code)
-  if (i >= 0) form.serviceItems.splice(i, 1)
-  else form.serviceItems.push(code)
+/** 陪诊档位单选：再点已选档位不取消（必须留一个选项，金额靠它算） */
+function selectAccompanyOption(code: string) {
+  form.serviceItems = [code]
 }
 
 /** 选中项失效时回落到第一个仍可约的时段，全部约满则清空以触发提交拦截 */
@@ -388,11 +418,13 @@ function buildPayload(): CreateOrderPayload | null {
     payload.feed_only = form.feedOnly
     payload.need_familiar = form.needFamiliar
   } else {
-    // 陪诊：只回传后台配置项的 code，价格由后端按 SKU 规则计算
+    // 陪诊：回传所选档位 code，价格由后端按 SKU 规则计算；
+    // 时长取档位配置的 minutes，供派单参考
     // 就诊人直接取服务地址的联系人，不再单独输入
     payload.hospital = form.hospital
     payload.patient_name = addr.contact_name.trim()
     payload.service_items = [...form.serviceItems]
+    payload.duration_min = serviceItemOptions.value.find((it) => it.code === form.serviceItems[0])?.minutes
     payload.remark = form.remark
   }
 
@@ -585,8 +617,8 @@ async function submit() {
       return
     }
     // 基础服务费本身即构成一单，只有未配置基础费的老配置才要求至少选一项
-    if (!form.serviceItems.length && !baseItem.value) {
-      uni.showToast({ title: '请至少选择一项陪诊服务', icon: 'none' })
+    if (!form.serviceItems.length) {
+      uni.showToast({ title: '请选择服务档位', icon: 'none' })
       return
     }
   }
@@ -775,13 +807,13 @@ async function startPay(orderNo: string) {
         <view class="f-label">服务时长</view>
         <view class="pills">
           <view
-            v-for="d in durations"
-            :key="d"
+            v-for="d in durationOptions"
+            :key="d.minutes"
             class="pill soft"
-            :class="{ active: form.durationMin === d }"
-            @tap="form.durationMin = d"
+            :class="{ active: form.durationMin === d.minutes }"
+            @tap="form.durationMin = d.minutes"
           >
-            {{ d }} 分钟
+            {{ d.minutes }} 分钟
           </view>
         </view>
       </template>
@@ -824,32 +856,24 @@ async function startPay(orderNo: string) {
         </view>
       </view>
       <view class="divider" />
-      <!-- 基础服务费：默认必选，勾选态锁定，价格展示用，金额由后端算 -->
-      <view v-if="baseItem" class="base-item">
-        <view class="base-item-name">
-          <text class="check-box checked">✓</text>
-          <text>{{ baseItem.name }}</text>
-          <text class="base-tag">必选</text>
-        </view>
-        <text class="service-chip-price">{{ price(baseItem.price) }}</text>
-      </view>
-      <view class="f-label service-label">陪诊服务 <text class="f-label-sub">（可多选）</text></view>
+      <!-- 计价档位（单选）：选项与价格全部来自后台配置，默认按时长分档；金额由后端按所选档位算 -->
+      <view class="f-label service-label">服务档位 <text class="f-label-sub">（单选）</text></view>
       <view class="service-grid">
         <view
           v-for="it in serviceItemOptions"
           :key="it.code"
           class="service-chip"
-          :class="{ active: form.serviceItems.includes(it.code) }"
-          @tap="toggleServiceItem(it.code)"
+          :class="{ active: form.serviceItems[0] === it.code }"
+          @tap="selectAccompanyOption(it.code)"
         >
           <view class="service-chip-name">
-            <text class="check-box">{{ form.serviceItems.includes(it.code) ? '✓' : '' }}</text>
+            <text class="check-box">{{ form.serviceItems[0] === it.code ? '✓' : '' }}</text>
             <text>{{ it.name }}</text>
           </view>
           <text class="service-chip-price">{{ price(it.price) }}</text>
         </view>
       </view>
-      <view class="f-hint">按所选项目计价，医院与服务项均由社区统一配置</view>
+      <view class="f-hint">价格档位由社区统一配置，选一档即订单金额</view>
     </view>
 
     <!-- 进入方式（选填）：门禁信息加密存储，服务方只在服务前后窗口内可见。
@@ -904,7 +928,8 @@ async function startPay(orderNo: string) {
     <!-- 费用估算 -->
     <view class="fee-card">
       <view class="fee-row">
-        <text class="fee-label">费用估算</text>
+        <!-- 陪诊/垃圾是确定金额，遛宠才存在估算口径 -->
+        <text class="fee-label">{{ feeLabel }}</text>
         <text class="fee-amount">
           {{ preview ? price(preview.total) : '--' }}
         </text>

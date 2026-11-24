@@ -212,6 +212,8 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 
 			// 陪诊可选项：医院与服务项由后台在 SKU 规则里配置，用户端只读
 			authed.GET("/services/accompany/options", api.AccompanyOptions)
+			// 遛宠时长档位：由后台在 SKU 规则里配置，用户端只读
+			authed.GET("/services/dogwalk/options", api.DogwalkOptions)
 			// 时段余量：预约页据此把满员时段置灰
 			authed.GET("/services/slots", api.SlotAvailability)
 

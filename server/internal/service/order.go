@@ -71,6 +71,26 @@ func (s *OrderService) AccompanyOptions(ctx context.Context) (pricing.AccompanyO
 	return opts, nil
 }
 
+// DogwalkOptions 返回遛宠预约选项（服务时长档位与一口价）。
+// 数据来自 service_skus.rules.duration_options，后台用 PUT /api/admin/skus/{id} 改，用户端只读。
+func (s *OrderService) DogwalkOptions(ctx context.Context) (pricing.DogWalkRules, error) {
+	sku, err := s.skus.Get(ctx, model.ServiceDogWalk, model.PlanSingle)
+	if err != nil {
+		return pricing.DogWalkRules{}, errs.Wrap(errs.CodeInternal, err)
+	}
+	if sku == nil {
+		return pricing.DogWalkRules{}, errs.BizMsg(errs.CodeNotFound, "遛宠服务未配置")
+	}
+	var rules pricing.DogWalkRules
+	if err := json.Unmarshal(json.RawMessage(sku.Rules), &rules); err != nil {
+		return pricing.DogWalkRules{}, errs.Wrap(errs.CodeInternal, err)
+	}
+	if len(rules.DurationOptions) == 0 {
+		return pricing.DogWalkRules{}, errs.BizMsg(errs.CodeNotFound, "遛宠时长档位尚未配置，请联系运营在后台设置")
+	}
+	return rules, nil
+}
+
 // Preview 费用试算，不落库、不占库存。前端在提交前展示明细用。
 func (s *OrderService) Preview(ctx context.Context, userID uint64, req dto.PreviewOrderReq) (*dto.PreviewOrderResp, error) {
 	addr, sku, date, err := s.validate(ctx, userID, req)

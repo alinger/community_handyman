@@ -354,6 +354,23 @@ func (a *API) AccompanyOptions(c *gin.Context) {
 	response.OK(c, opts)
 }
 
+// DogwalkOptions 遛宠预约选项（服务时长档位与一口价）。
+// @Summary      遛宠服务选项
+// @Description  返回后台配置的服务时长档位（含一口价，单位分）；价格仅供展示，下单金额由后端按同一配置计算
+// @Tags         服务配置
+// @Produce      json
+// @Success      200  {object}  response.Body  "data 为 pricing.DogWalkRules"
+// @Security     UserID
+// @Router       /api/v1/services/dogwalk/options [get]
+func (a *API) DogwalkOptions(c *gin.Context) {
+	opts, err := a.Order.DogwalkOptions(c.Request.Context())
+	if err != nil {
+		response.Fail(c, err)
+		return
+	}
+	response.OK(c, opts)
+}
+
 // SlotAvailability 某日各时段余量（预约页据此把满员时段置灰）。
 // @Summary      时段余量
 // @Description  返回指定日期与服务类型的各时段库存；后台未配置该日库存时返回空数组，前端视为全部可选

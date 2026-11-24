@@ -11,11 +11,14 @@ type HospitalOption struct {
 	Name string `json:"name"`
 }
 
-// AccompanyItem 后台配置的可勾选陪诊服务项。Price 单位为分，是唯一的计价依据。
+// AccompanyItem 后台配置的陪诊服务项。自 000021 起语义为「计价档位」：
+// 用户单选一个档位，价格即订单金额（如 20分钟/25元）。Price 单位为分。
+// Minutes 是档位对应的服务时长（分钟），随订单落库供派单参考，可不配。
 type AccompanyItem struct {
-	Code  string `json:"code"`
-	Name  string `json:"name"`
-	Price int64  `json:"price"`
+	Code    string `json:"code"`
+	Name    string `json:"name"`
+	Price   int64  `json:"price"`
+	Minutes int    `json:"minutes,omitempty"`
 }
 
 // AccompanyOptions 陪诊可选项，来自 service_skus.rules。

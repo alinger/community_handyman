@@ -58,7 +58,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	gw, err := payment.New(cfg.Payment.Provider, cfg.Payment.SandboxSecret)
+	gw, err := payment.New(cfg.Payment.Provider, cfg.Payment.SandboxSecret, payment.WechatOptions{
+		AppID:          cfg.Wechat.AppID,
+		MchID:          cfg.Wechat.MchID,
+		SerialNo:       cfg.Wechat.SerialNo,
+		APIv3Key:       cfg.Wechat.APIv3Key,
+		PrivateKeyPath: cfg.Wechat.PrivateKeyPath,
+		NotifyURL:      cfg.Wechat.NotifyURL,
+	})
 	if err != nil {
 		log.Error("支付渠道初始化失败", "err", err)
 		os.Exit(1)

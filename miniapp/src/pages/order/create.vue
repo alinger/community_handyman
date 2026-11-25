@@ -25,7 +25,8 @@ import {
 import { useUserStore } from '@/store/user'
 import { ensureAuth } from '@/utils/auth'
 import { nextDays, price, SLOTS, slotTextOf } from '@/utils/format'
-import { ApiError, BASE_URL } from '@/utils/request'
+import { ApiError } from '@/utils/request'
+import { startOrderPay } from '@/utils/pay'
 
 const user = useUserStore()
 
@@ -651,31 +652,11 @@ async function submit() {
 }
 
 /**
- * 发起支付。沙箱渠道无法调起真实微信支付，
- * 开发环境用后端 mock-pay 走完回调；接商户号后换成 uni.requestPayment。
+ * 发起支付。渠道由后端配置决定（wechat / sandbox），
+ * 具体调起逻辑在 utils/pay：微信渠道走 uni.requestPayment，沙箱走 mock-pay。
  */
 async function startPay(orderNo: string) {
-  // #ifdef MP-WEIXIN
-  uni.showModal({
-    title: '待支付',
-    content: '开发环境使用沙箱支付，可在订单详情页完成支付',
-    showCancel: false,
-  })
-  return
-  // #endif
-
-  // #ifndef MP-WEIXIN
-  await new Promise<void>((resolve, reject) => {
-    uni.request({
-      // 用统一的 BASE_URL，避免和 request.ts 的回落逻辑不一致
-      url: `${BASE_URL}/api/v1/dev/orders/${orderNo}/mock-pay`,
-      method: 'POST',
-      header: { 'X-User-Id': user.userId },
-      success: () => resolve(),
-      fail: () => reject(new Error('模拟支付失败')),
-    })
-  })
-  // #endif
+  await startOrderPay(orderNo)
 }
 </script>
 

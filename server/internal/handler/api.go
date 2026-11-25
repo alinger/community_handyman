@@ -564,6 +564,13 @@ func (a *API) SandboxPayCallback(c *gin.Context) {
 	response.OK(c, gin.H{"received": true})
 }
 
+// WeChatPayCallback 微信支付 APIv3 回调。
+// 验签与解密在 Gateway.VerifyNotify 内完成，与沙箱回调共用 HandleNotify 落账逻辑：
+// 幂等靠流水号唯一索引，金额校验在 PaymentService，渠道由配置决定，路由只负责收包。
+func (a *API) WeChatPayCallback(c *gin.Context) {
+	a.SandboxPayCallback(c)
+}
+
 // ---------- 个人信息（设置页） ----------
 
 // GetMe 当前用户信息。

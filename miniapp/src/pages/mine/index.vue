@@ -261,7 +261,7 @@ function onSwitchView() {
       <view class="menu-item" @tap="callService">
         <text>联系客服</text>
         <view class="menu-right">
-          <text class="menu-value">021-0000 0000</text>
+          <text class="menu-value">13966088440</text>
           <text class="chev">›</text>
         </view>
       </view>

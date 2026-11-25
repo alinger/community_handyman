@@ -13,7 +13,6 @@ import {
   listRecords,
   monthlyDetail,
   orderDetail,
-  payOrder,
   providerMonthlyFinish,
   providerMonthlyRedeem,
   providerReschedule,
@@ -27,8 +26,9 @@ import {
 import { useUserStore } from '@/store/user'
 import { ensureAuth } from '@/utils/auth'
 import { friendlyDate, price, SERVICE_LABEL, slotTextOf } from '@/utils/format'
-import { ApiError, BASE_URL, getUserId } from '@/utils/request'
+import { ApiError, BASE_URL } from '@/utils/request'
 import { contactProvider } from '@/utils/provider-contact'
+import { startOrderPay } from '@/utils/pay'
 
 const user = useUserStore()
 const orderNo = ref('')
@@ -161,29 +161,15 @@ function pad(n: number): string {
   return n < 10 ? '0' + n : String(n)
 }
 
-/** 支付。沙箱下走 mock-pay，真实环境换成 uni.requestPayment */
+/** 支付。渠道由后端配置决定（wechat / sandbox），调起逻辑在 utils/pay */
 async function onPay() {
   if (acting.value || !order.value) return
   acting.value = true
   try {
-    const params = await payOrder(order.value.order_no)
-
-    // #ifdef MP-WEIXIN
-    // 真实支付：uni.requestPayment({ provider: 'wxpay', ...params.params })
-    uni.showModal({
-      title: '待支付',
-      content: params.mock ? '当前为沙箱渠道，请用 H5 或接口完成支付' : '请在小程序内完成支付',
-      showCancel: false,
-    })
-    // #endif
-
-    // #ifndef MP-WEIXIN
-    if (params.mock) {
-      await mockPay(order.value.order_no)
-      uni.showToast({ title: '支付成功', icon: 'success' })
-      await load()
-    }
-    // #endif
+    await startOrderPay(order.value.order_no)
+    // 微信回调是异步推进订单状态的，稍等片刻再刷新；期间状态未变时下拉刷新即可
+    await new Promise((r) => setTimeout(r, 800))
+    await load()
   } catch (e) {
     uni.showModal({
       title: '支付失败',
@@ -193,23 +179,6 @@ async function onPay() {
   } finally {
     acting.value = false
   }
-}
-
-/** 构造模拟支付请求（仅开发环境可用） */
-function mockPay(orderNumber: string) {
-  return new Promise<void>((resolve, reject) => {
-    uni.request({
-      url: `${BASE_URL}/api/v1/dev/orders/${orderNumber}/mock-pay`,
-      method: 'POST',
-      header: { 'X-User-Id': getUserId() },
-      success: (res) => {
-        const body = res.data as { code: number; message: string }
-        if (body?.code === 0) resolve()
-        else reject(new ApiError(body?.code ?? -1, body?.message || '模拟支付失败'))
-      },
-      fail: () => reject(new ApiError(-1, '网络异常')),
-    })
-  })
 }
 
 async function onCancel() {

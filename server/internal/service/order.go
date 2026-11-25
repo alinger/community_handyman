@@ -311,6 +311,7 @@ func (s *OrderService) Create(ctx context.Context, userID uint64, req dto.Create
 		OrderNo:     order.OrderNo,
 		Amount:      order.TotalAmount,
 		Description: serviceName(order.ServiceType),
+		OpenID:      s.userOpenid(ctx, userID),
 	})
 	if err != nil {
 		// 订单已落库并占库存，支付失败允许用户重新发起，不整单回滚
@@ -342,6 +343,7 @@ func (s *OrderService) Repay(ctx context.Context, userID uint64, orderNo string)
 		OrderNo:     o.OrderNo,
 		Amount:      o.TotalAmount,
 		Description: serviceName(o.ServiceType),
+		OpenID:      s.userOpenid(ctx, userID),
 	})
 	if err != nil {
 		return nil, errs.Wrap(errs.CodePayFailed, err)
@@ -678,6 +680,17 @@ func (s *OrderService) calc(ctx context.Context, userID uint64, _ *model.Address
 		return pricing.Result{}, errs.BizMsg(errs.CodeInvalidParam, err.Error())
 	}
 	return res, nil
+}
+
+// userOpenid 取用户 openid（微信支付 JSAPI 需要）。
+// 纯手机号注册、从未微信登录的用户没有 openid：沙箱渠道不使用该字段，
+// 微信渠道会在 Prepay 时给出明确报错，引导用户微信登录后再支付。
+func (s *OrderService) userOpenid(ctx context.Context, userID uint64) string {
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil || u == nil {
+		return ""
+	}
+	return u.OpenID
 }
 
 // ToOrderResp 组装订单响应，节点按服务类型映射文案。

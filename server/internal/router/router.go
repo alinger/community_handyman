@@ -350,6 +350,10 @@ func New(cfg *config.Config, db *gorm.DB, gw payment.Gateway, store storage.Stor
 	if gw != nil && gw.Name() == "sandbox" {
 		r.POST("/callback/sandbox/pay", api.SandboxPayCallback)
 	}
+	if gw != nil && gw.Name() == "wechat" {
+		// 微信支付 APIv3 回调：公网可达，验签/解密在 Gateway.VerifyNotify 内完成
+		r.POST("/callback/wechat/pay", api.WeChatPayCallback)
+	}
 
 	return r, deps
 }
